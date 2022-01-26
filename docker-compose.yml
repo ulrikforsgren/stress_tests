@@ -1,0 +1,56 @@
+version: '3.2'
+services:
+  n1:
+    image: "containers.cisco.com/uforsgre/nso-sys-install-${NSO_BASE_DEV_VERSION}:${CONTAINER_VERSION}"
+    privileged: true
+    volumes:
+      - type: bind
+        source: ./n1
+        target: /root/nso-project
+    hostname: n1
+    networks:
+      a-net:
+        ipv4_address: 172.18.1.2
+    ports:
+      - "8081:8080"
+  n2:
+    image: "containers.cisco.com/uforsgre/nso-sys-install-${NSO_BASE_DEV_VERSION}:${CONTAINER_VERSION}"
+    privileged: true
+    volumes:
+      - type: bind
+        source: ./n2
+        target: /root/nso-project
+    hostname: n2
+    networks:
+      b-net:
+        ipv4_address: 172.18.2.2
+    ports:
+      - "8082:8080"
+  router:
+    image: "containers.cisco.com/uforsgre/router:${ROUTER_VERSION}"
+    privileged: true
+    volumes:
+      - type: bind
+        source: ./router
+        target: /root/project
+    hostname: router
+    ports:
+      - "2200:22"
+    networks:
+      a-net:
+        ipv4_address: 172.18.1.100
+      b-net:
+        ipv4_address: 172.18.2.100
+
+networks:
+    a-net:
+        driver: bridge
+        ipam:
+          config:
+            - subnet: 172.18.1.0/24
+    b-net:
+        driver: bridge
+        ipam:
+          config:
+            - subnet: 172.18.2.0/24
+

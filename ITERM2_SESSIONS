@@ -1,0 +1,23 @@
+SESSIONS = {
+  'splits': [
+    {
+      'type': 'v',
+      'stdin': 'make cli-n1',
+      'splits': [
+        {
+          'type': 'h',
+          'stdin': 'make cli-n2',
+          'splits': [
+            {
+              'type': 'h',
+              'stdin': '',
+            },
+          ]
+        },
+      ]
+    },
+    {
+      'type': 'h',
+    },
+  ]
+}

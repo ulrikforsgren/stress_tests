@@ -1,0 +1,14 @@
+Tue Oct 15 08:16:17 UTC 2019 INFO  Starting install of nso
+Tue Oct 15 08:16:17 UTC 2019 INFO  Using /opt/ncs/ncs-4.6.1.6 for static files
+Tue Oct 15 08:16:17 UTC 2019 INFO  Using /etc/ncs for configuration files
+Tue Oct 15 08:16:17 UTC 2019 INFO  Using /var/opt/ncs for run-time state files
+Tue Oct 15 08:16:17 UTC 2019 INFO  Using /var/log/ncs for log files
+Tue Oct 15 08:16:25 UTC 2019 INFO  Installed ncs-4.6.1.6.linux.x86_64.installer0.bin
+Tue Oct 15 08:16:27 UTC 2019 INFO  Installed confd-6.6.1.linux.x86_64.static-crypto.installer.bin
+Tue Oct 15 08:16:27 UTC 2019 INFO  Using PAM service common-auth for authentication
+Tue Oct 15 08:16:27 UTC 2019 INFO  Generating self-signed certificates for HTTPS
+Tue Oct 15 08:16:29 UTC 2019 INFO  Installed init script /etc/init.d/ncs
+Tue Oct 15 08:16:29 UTC 2019 INFO  Installed user profile script ncs.sh in /etc/profile.d
+Tue Oct 15 08:16:29 UTC 2019 INFO  Installed user profile script ncs.csh in /etc/profile.d
+Tue Oct 15 08:16:29 UTC 2019 INFO  Installed 'logrotate' configuration file ncs in /etc/logrotate.d
+Tue Oct 15 08:16:29 UTC 2019 INFO  NCS installation complete

@@ -1,0 +1,42 @@
+A docker based test environment with three NSO nodes can be started easily:
+  make start
+
+NOTE! You might need to issue a "docker login containers.cisco.com" prior to this.
+      1. Login to https://containers.cisco.com.
+      2. Goto into your user and user settings.
+      3. Click on "Generate Encrypted Passwod".
+      4. Type your current password when asked.
+      5. Copy the generated.
+      6. Run "docker login containers.cisco.com" in a shell and provide
+         your username and the encrypted password
+
+      This downloads the needed containers from containers.cisco.com.
+
+
+Network topology:
+
+All IP addresses = 172.18.x.x
+
+n1 (.1.2) ------ (.1.100) router (.2.100) ------ n2 (.2.2)
+                    eth0          eth1     \---- n3 (.2.3)
+
+The individual nodes can be access with a number of supporting makefile rules:
+  make bash-n1
+  make cli-n1
+  make router
+
+Run "make all" to see all available rules.
+
+
+Ways to cause failures and make tailf-hcc and second-slave-ctrl take actions:
+1. Kill NSO
+  make bash-1
+  pkill ncs
+  ...
+  ncs   # restarts NSO
+
+2. Alter interface in router
+  make bash-router
+  ip link set dev eth0 down
+  ...
+  ip link set dev eth0 up

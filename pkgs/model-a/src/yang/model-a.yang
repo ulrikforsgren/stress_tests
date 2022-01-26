@@ -1,0 +1,16 @@
+module model-a {
+  namespace "http://com/example/modela";
+  prefix model-a;
+
+  list model-a {
+    key name;
+
+    leaf name {
+      type string;
+    }
+
+    leaf str-value {
+      type string;
+    }
+  }
+}
