@@ -51,6 +51,9 @@ n1: pkgs
 	cp setup-n1.sh n1/setup.sh
 	rsync -ra nso-project/ n1/.
 	cp -rp pkgs/model-a n1/var/packages/.
+	cd n1; ln -s var/packages .
+	cd n1; ln -s var/state .
+	cd n1; ln -s var/cdb ncs-cdb
 n2: pkgs
 	mkdir n2
 	cp hostsfile n2/.
@@ -58,8 +61,12 @@ n2: pkgs
 	cp setup-n2.sh n2/setup.sh
 	rsync -ra nso-project/ n2/.
 	cp -rp pkgs/model-a n2/var/packages/.
+	cd n2; ln -s var/packages .
+	cd n2; ln -s var/state .
+	cd n2; ln -s var/cdb ncs-cdb
 
 .PHONY: pkgs
+pkgs:
 	make -C pkgs/model-a/src all
 
 .PHONY: clean
