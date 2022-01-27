@@ -3,6 +3,10 @@
 SINGLE_PACKAGES =  model-a
 
 
+ifeq "$(NCS_DIR)" ""
+$(error NCS_DIR is not setup. Source ncsrc to setup NSO environment before proceeding)
+endif
+
 NSO_VERSION = $(shell ncs --version)
 NSO_VER_MAJ = $(shell echo $(NSO_VERSION) | cut -f1 -d.)
 NSO_VER_MIN = $(shell echo $(NSO_VERSION) | cut -f2 -d. | cut -f1 -d_)
