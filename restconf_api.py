@@ -17,8 +17,9 @@ HEADERS_JSON={
 # Expected response status for successful requests.
 REQ_DISPATCH = {
     'create': ('POST', 201),
-    'delete': ('DELETE', 204),
-    'read': ('GET', 200)
+    'read':   ('GET', 200),
+    'update': ('PATCH', 204),
+    'delete': ('DELETE', 204)
 }
 
 

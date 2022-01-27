@@ -80,22 +80,23 @@ class Parameters(dict):
                 v.update_batch()
 
 
-async def stress_requests(n, n_p, setup, teardown, task, args, parameters):
+async def stress_requests(n, n_p, setup, teardown, task, args):
     results = []
     await setup(args)
     while n>0: # Execute requests in batches of n_p in parellel.
         if n<n_p: n_p = n
-        tasks = [ asyncio.create_task(task(parameters, **args))
+        tasks = [ asyncio.create_task(task(**args))
                   for p in range(0,n_p)]
         results += await asyncio.gather(*tasks)
-        parameters.update_batch()
+        if 'parameters' in args:
+            args['parameters'].update_batch()
         n -= n_p
     await teardown(args)
     return results
 
 
 
-async def request(parameters, client=None, op='', url='', data=''):
+async def request(client=None, parameters=Parameters(), op='', url='', data=''):
     url = url.format_map(parameters)
     data = data.format_map(parameters)
     parameters.update_request()
@@ -130,7 +131,7 @@ def assert_ok(results):
 
 # Calculate the average execution time for all "ok" requests and
 # count number of result types "ok"/"nok"/"exception".
-def calc_average(results, expected_status):
+def calc_average(results):
     total_ok = 0.0
     count_ok = 0
     count_wrong = 0
