@@ -128,23 +128,21 @@ def assert_ok(results):
     assert(assertion)
 
 
+# Calculate the average execution time for all "ok" requests and
+# count number of result types "ok"/"nok"/"exception".
 def calc_average(results, expected_status):
     total_ok = 0.0
     count_ok = 0
-    total_wrong = 0.0
     count_wrong = 0
-    total_exc = 0.0
     count_exc = 0
     for r in results:
         rid, res, *rest = r
         if res == 'ok':
             st,_,el = rest
-            if st == expected_status:
-                total_ok += el
-                count_ok += 1
-            else:
-                total_wrong += el
-                count_wrong += 1
+            total_ok += el
+            count_ok += 1
+        elif res == 'nok':
+            count_wrong += 1
         elif res == 'exception':
             count_exc += 1
 

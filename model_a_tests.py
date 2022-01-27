@@ -30,15 +30,13 @@ def do_test(cmd, n, n_p):
     if cmd == 'clean':
         args = {
             'op': 'delete',
-            'url': '/model-a:model-a',
-            'data': ''
+            'url': '/model-a:model-a'
         }
         cmd = 'delete'
     elif cmd == 'delete':
         args = {
             'op': 'delete',
-            'url': '/model-a:model-a/model-a:list=K{id}',
-            'data': ''
+            'url': '/model-a:model-a/model-a:list=K{id}'
         }
     elif cmd == 'create':
         args = {
@@ -49,8 +47,7 @@ def do_test(cmd, n, n_p):
     elif cmd == 'read':
         args = {
             'op': 'read',
-            'url': '/model-a:model-a/model-a:list=K{id}',
-            'data': ''
+            'url': '/model-a:model-a/model-a:list=K{id}'
         }
     st = time.monotonic()
     results = asyncio.run(stress_requests(n, n_p, setup, teardown, request, args, parameters))
