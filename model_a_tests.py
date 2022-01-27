@@ -36,7 +36,6 @@ def do_test(cmd, n, n_p):
             'op': 'delete',
             'url': '/model-a:model-a'
         }
-        cmd = 'delete'
     elif cmd == 'create':
         args = {
             'op': 'create',
