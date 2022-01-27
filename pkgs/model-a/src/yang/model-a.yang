@@ -2,15 +2,17 @@ module model-a {
   namespace "http://com/example/modela";
   prefix model-a;
 
-  list model-a {
-    key name;
+  container model-a {
+    list list {
+      key name;
 
-    leaf name {
-      type string;
-    }
+      leaf name {
+        type string;
+      }
 
-    leaf str-value {
-      type string;
+      leaf str-value {
+        type string;
+      }
     }
   }
 }
