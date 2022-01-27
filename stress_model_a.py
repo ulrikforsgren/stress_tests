@@ -111,6 +111,7 @@ async def restconf_request(client, host, op, resource, data=None, options=None):
     request_id += 1
     rid = request_id
     method, response_code = REQ_DISPATCH[op]
+    # TODO: Pass options as keyword "param" argument.
     options = COMMIT_PARAMS
     url = f'http://{host}/restconf/data{resource}' + options
     st = time.monotonic()
@@ -120,8 +121,8 @@ async def restconf_request(client, host, op, resource, data=None, options=None):
                 data = None # No content is expected.
             else:
                 if response.headers['Content-Type'] == 'application/yang-data+json':
-                #    data = await response.json()
-                #else:
+                    data = await response.json()
+                else:
                     data = await response.text()
             elapsed = time.monotonic()-st
             return (rid, 'ok', response.status, data, elapsed)
