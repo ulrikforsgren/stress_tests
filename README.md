@@ -36,6 +36,15 @@ So far these increments have come to mind:
 3. Simple template based empty service, i.e. does not create any device config.
 4. Simple Python based empty service, i.e. does not create any device config.
 
+# TODO #
+
+* Option to setup a docker environment. Adds possibility to see how network
+  latency for HA and devices affects performance.
+* Modular scripts:
+    * RESTCONF/NETCONF transport modules
+    * Request execution modules e.g. parallelism
+    * Use argparse e.g. host, port etc.
+
 ## Dimensions and Permutations ##
 
 There are several dimensions on how to look at how at and how to combine
