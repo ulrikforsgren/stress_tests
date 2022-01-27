@@ -3,7 +3,6 @@ DIR=$(shell basename `pwd`)
 
 N1=n1
 N2=n2
-N3=n3
 
 all:
 	@echo "Makefile rules:"

@@ -1,4 +1,5 @@
-version: '3.2'
+version: '3.7'
+
 services:
   n1:
     image: "containers.cisco.com/uforsgre/nso-sys-install-${NSO_BASE_DEV_VERSION}:${CONTAINER_VERSION}"

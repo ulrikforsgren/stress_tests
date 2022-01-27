@@ -116,14 +116,14 @@ async def restconf_request(client, host, op, resource, data=None, options=None):
     st = time.monotonic()
     try:
         async with client.request(method, url, headers=HEADERS_JSON, data=data.encode('utf-8')) as response:
-            elapsed = time.monotonic()-st
             if response.status in [ 201, 204 ]:
                 data = None # No content is expected.
             else:
                 if response.headers['Content-Type'] == 'application/yang-data+json':
-                    data = await response.json()
-                else:
+                #    data = await response.json()
+                #else:
                     data = await response.text()
+            elapsed = time.monotonic()-st
             return (rid, 'ok', response.status, data, elapsed)
     except Exception as e:
         return (rid, 'exception', repr(e))
@@ -172,6 +172,7 @@ def assert_statuses(cmd, results):
             if st != expected_status:
                 pass
                 #print(f"ERROR: wrong status returned {rid}: {st} != {expected_status}")
+                #print(data)
         elif res == 'exception':
             exc, = rest
             #print(f"ERROR: exception {rid}: {exc}")
@@ -212,19 +213,19 @@ def do_test(cmd, n, n_p):
     elif cmd == 'delete':
         args = {
             'op': 'delete',
-            'url': '/model-a:model-a=K{id}',
+            'url': '/model-a:model-a/model-a:list=K{id}',
             'data': ''
         }
     elif cmd == 'create':
         args = {
             'op': 'create',
-            'url': '',
-            'data': '{{"/model-a:model-a":{{"name":"K{id}","str-value":"String data {id}"}}}}'
+            'url': '/model-a:model-a',
+            'data': '{{ "list":{{"name":"K{id}","str-value":"String data {id}"}}}}'
         }
     elif cmd == 'read':
         args = {
             'op': 'read',
-            'url': '/model-a:model-a=K{id}',
+            'url': '/model-a:model-a/model-a:list=K{id}',
             'data': ''
         }
     st = time.monotonic()
@@ -249,10 +250,9 @@ if __name__ == '__main__':
     else:
         average = -1
 
-    print("Count:", n)
-    print("Total time:", elapsed)
-    print("Count OK:", count)
-    print("Per second:", count/elapsed)
+    print("Total time:         ", elapsed)
+    print("Count OK:           ", count)
+    print("Per second:         ", count/elapsed)
     print("Average per request:", average)
-    print("Wrong status:", count_wrong)
-    print("Exceptions:", count_exc)
+    print("Wrong status:       ", count_wrong)
+    print("Exceptions:         ", count_exc)
