@@ -68,3 +68,17 @@ Other features:
 * Kickers
 * Subscribers: Python/Java?
 
+
+## Usage ##
+
+The current usage is limited to single node setup. The idea with LSA, HA and
+additional environment with Docker is in the pipeline.
+
+    . <path-to-nso>/ncsrc
+    make single
+    . venv/bin/activate
+    make start
+    ./stress_model_a.py create 1000 1
+    ./model-a_read_1000.py
+    ./stress_model_a.py clean 1 1
+    ./model-a_create_delete_100.py
