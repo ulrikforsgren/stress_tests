@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
 # -*- mode: python; python-indent: 4 -*-
 
+import argparse
 import asyncio
+from multiprocessing import Pool
 import pprint as pp
+import time
 
-from restconf_api import REQ_DISPATCH, restconf_request
+from restconf_api import REQ_DISPATCH, setup, teardown, restconf_request
 
 HOST='localhost'
 PORT=8080
@@ -32,9 +35,11 @@ parameters = Parameters({
 class Sequence:
     def __init__(self, n, ffunc=None):
         self.n = n
-        self.ffunc = ffunc or (lambda s: str(s))
+        # Unfortunately lamdba can't be pickled to a subprocess.
+#        self.ffunc = ffunc or (lambda s: str(s))
     def __str__(self):
-        s = self.ffunc(self.n)
+        #s = self.ffunc(self.n)
+        s = str(self.n)
         self.update_str()
         return s
     def update_str(self):
@@ -148,3 +153,72 @@ def calc_average(results):
             count_exc += 1
 
     return count_ok, total_ok, count_wrong, count_exc
+
+
+def parseArgs(args):
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--host', type=str,
+                        help='host[:port]',
+                        default='localhost:8080')
+    parser.add_argument('cmd', choices=['clean', 'create', 'read',
+                                        'update', 'delete', 'crud'])
+    parser.add_argument("-n", required=False, type=int, default=1)
+    parser.add_argument("-p", required=False, type=int, default=1)
+    return parser.parse_args(args)
+
+
+def do_test(n, n_p, req):
+    st = time.monotonic()
+    results = asyncio.run(stress_requests(n, n_p, setup, teardown, request, req))
+    elapsed = time.monotonic()-st
+
+    count, total, count_wrong, count_exc = calc_average(results)
+
+    return elapsed, count, total, count_wrong, count_exc
+
+#
+# Run test in subprocess to ensure proper cleanup between test iterations.
+#
+def run_test_in_subprocess(func, n, n_p, req, do_print=False):
+    with Pool(processes=1) as pool:
+        res = pool.apply(func, (n, n_p, req))
+        elapsed, count, total, count_wrong, count_exc = res
+        if count:
+            average=total/count
+        else:
+            average = -1
+        result = count, n_p, elapsed, total, average
+        if do_print:
+            op = req['op'].upper()
+            print(f'{op:<6} {count:>5} {n_p:>3} {elapsed:>5.1f} {count/elapsed:>6.1f} {average:>6.3f} {count_wrong:>5} {count_exc:>5}')
+        pool.close()
+        #TODO: Return wrong and exc as well...
+        return (count, n_p, elapsed, total, average)
+
+
+def run_crud_tests(args, n, n_ps, tests, do_print=False):
+    results = []
+    for n_p in n_ps:
+        for op in ['create', 'read', 'update', 'delete']:
+            req = tests[op]
+            results.append(run_test_in_subprocess(do_test, n, n_p, req, do_print))
+    return results
+
+
+def run_single_test(args, tests):
+    n = args.n
+    n_p = args.p
+    req = tests[args.cmd]
+
+    elapsed, count, total, count_wrong, count_exc = do_test(n, n_p, req)
+    if count:
+        average=total/count
+    else:
+        average = -1
+
+    print("Total time:         ", elapsed)
+    print("Count OK:           ", count)
+    print("Per second:         ", count/elapsed)
+    print("Average per request:", average)
+    print("Wrong status:       ", count_wrong)
+    print("Exceptions:         ", count_exc)
