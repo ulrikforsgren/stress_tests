@@ -27,7 +27,12 @@ CRUD_TESTS = {
         {
             'op': 'create',
             'url': '/model-a:model-a',
-            'data': '{{ "list":{{"name":"K{id}","str-value":"String data {id}"}}}}',
+            'data': '''{{
+                        "list":{{
+                            "name":"K{id}",
+                            "str-value":"String data {id}"
+                        }}
+                    }}''',
             'parameters': parameters
         },
     'read':
@@ -40,7 +45,11 @@ CRUD_TESTS = {
         {
             'op': 'update',
             'url': '/model-a:model-a/model-a:list=K{id}',
-            'data': '{{ "list":{{"str-value":"Changed string data {id}"}}}}',
+            'data': '''{{
+                        "list":{{
+                            "str-value":"Changed string data {id}"
+                        }}
+                    }}''',
             'parameters': parameters
         },
     'delete':
