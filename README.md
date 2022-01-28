@@ -39,11 +39,9 @@ So far these increments have come to mind:
 # TODO #
 
 * Option to setup a docker environment. Adds possibility to see how network
-  latency for HA and devices affects performance.
-* Modular scripts:
-    * RESTCONF/NETCONF transport modules
-    * Request execution modules e.g. parallelism
-    * Use argparse e.g. host, port etc.
+  latency for NSO, HA and devices affects performance.
+* NETCONF transport support
+* Use argparse for host, port etc.
 
 ## Dimensions and Permutations ##
 
