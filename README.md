@@ -42,6 +42,8 @@ So far these increments have come to mind:
   latency for NSO, HA and devices affects performance.
 * NETCONF transport support
 * Use argparse for host, port etc.
+* Use of -n for crud tests calc. step in the pattern 1,2,5,...
+* Option to override steps.
 
 ## Dimensions and Permutations ##
 
