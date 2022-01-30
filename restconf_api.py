@@ -1,8 +1,6 @@
 # -*- mode: python; python-indent: 4 -*-
 
 from base64 import b64encode
-import time
-
 import aiohttp
 
 
@@ -40,7 +38,6 @@ async def restconf_request(client, host, op, resource, data=None, params=None):
     rid = request_id
     method, expected_status = REQ_DISPATCH[op]
     url = f'http://{host}/restconf/data{resource}'
-    st = time.monotonic()
     try:
         async with client.request(method, url, headers=HEADERS_JSON,
                                   data=data.encode('utf-8'),
@@ -52,8 +49,7 @@ async def restconf_request(client, host, op, resource, data=None, params=None):
                     data = await response.json()
                 else:
                     data = await response.text()
-            elapsed = time.monotonic()-st
             res = 'ok' if response.status == expected_status else 'nok'
-            return (rid, res, response.status, data, elapsed)
+            return (rid, res, response.status, data)
     except Exception as e:
         return (rid, 'exception', repr(e))

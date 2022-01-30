@@ -101,15 +101,18 @@ async def stress_requests(n, n_p, setup, teardown, task, args):
 
 
 
-async def request(client=None, parameters=Parameters(), op='', url='', data=''):
+async def default_task(client=None, parameters=Parameters(), op='', url='', data=''):
     url = url.format_map(parameters)
     data = data.format_map(parameters)
     parameters.update_request()
-    return await restconf_request(client,
+    st = time.monotonic()
+    resp = await restconf_request(client,
                                   f'{HOST}:{PORT}',
                                   op,
                                   url,
                                   data)
+    elapsed = time.monotonic()-st
+    return (*resp, elapsed)
 
 #
 # Assert that all results are "ok"
@@ -167,9 +170,10 @@ def parseArgs(args):
     return parser.parse_args(args)
 
 
-def do_test(n, n_p, req):
+def do_test(n, n_p, req, task=None):
+    task = task or default_task
     st = time.monotonic()
-    results = asyncio.run(stress_requests(n, n_p, setup, teardown, request, req))
+    results = asyncio.run(stress_requests(n, n_p, setup, teardown, task, req))
     elapsed = time.monotonic()-st
 
     count, total, count_wrong, count_exc = calc_average(results)
@@ -179,9 +183,9 @@ def do_test(n, n_p, req):
 #
 # Run test in subprocess to ensure proper cleanup between test iterations.
 #
-def run_test_in_subprocess(func, n, n_p, req, do_print=False):
+def run_test_in_subprocess(func, n, n_p, req, task=None, do_print=False):
     with Pool(processes=1) as pool:
-        res = pool.apply(func, (n, n_p, req))
+        res = pool.apply(func, (n, n_p, req, task))
         elapsed, count, total, count_wrong, count_exc = res
         if count:
             average=total/count
@@ -196,21 +200,21 @@ def run_test_in_subprocess(func, n, n_p, req, do_print=False):
         return (count, n_p, elapsed, total, average)
 
 
-def run_crud_tests(args, n, n_ps, tests, do_print=False):
+def run_crud_tests(args, n, n_ps, tests, task=None, do_print=False):
     results = []
     for n_p in n_ps:
         for op in ['create', 'read', 'update', 'delete']:
             req = tests[op]
-            results.append(run_test_in_subprocess(do_test, n, n_p, req, do_print))
+            results.append(run_test_in_subprocess(do_test, n, n_p, req, task, do_print))
     return results
 
 
-def run_single_test(args, tests):
+def run_single_test(args, tests, task=None):
     n = args.n
     n_p = args.p
     req = tests[args.cmd]
 
-    elapsed, count, total, count_wrong, count_exc = do_test(n, n_p, req)
+    elapsed, count, total, count_wrong, count_exc = do_test(n, n_p, req, task)
     if count:
         average=total/count
     else:
