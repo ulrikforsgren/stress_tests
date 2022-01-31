@@ -205,7 +205,7 @@ def run_test_in_subprocess(args, func, n, n_p, req, task=None, do_print=False):
 def np_gen(max_p):
     n = 1
     m = 1
-    while n<max_p:
+    while n<=max_p:
         for s in [1,2,5]:
             np = s*m
             if np<max_p:
