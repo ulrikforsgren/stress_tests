@@ -22,8 +22,10 @@ def parseArgs(args):
                         default='localhost:8080')
     parser.add_argument('cmd', choices=['clean', 'create', 'read',
                                         'update', 'delete', 'crud'])
-    parser.add_argument("-n", required=False, type=int, default=1)
-    parser.add_argument("-p", required=False, type=int, default=1)
+    parser.add_argument("-n", required=False, type=int)
+    parser.add_argument("-p", required=False, type=int)
+    parser.add_argument("-s", required=False, type=str)
+    parser.add_argument("-v", required=False, action='store_true', default=False)
     return parser.parse_args(args)
 
 
@@ -170,11 +172,14 @@ def calc_average(results):
     return count_ok, total_ok, count_wrong, count_exc
 
 
-def do_test(n, n_p, req, task=None):
+def do_test(args, n, n_p, req, task=None):
     task = task or default_task
     st = time.monotonic()
     results = asyncio.run(stress_requests(n, n_p, setup, teardown, task, req))
     elapsed = time.monotonic()-st
+
+    if args.v:
+        pprint(results)
 
     count, total, count_wrong, count_exc = calc_average(results)
 
@@ -183,9 +188,9 @@ def do_test(n, n_p, req, task=None):
 #
 # Run test in subprocess to ensure proper cleanup between test iterations.
 #
-def run_test_in_subprocess(func, n, n_p, req, task=None, do_print=False):
+def run_test_in_subprocess(args, func, n, n_p, req, task=None, do_print=False):
     with Pool(processes=1) as pool:
-        res = pool.apply(func, (n, n_p, req, task))
+        res = pool.apply(func, (args, n, n_p, req, task))
         elapsed, count, total, count_wrong, count_exc = res
         if count:
             average=total/count
@@ -199,23 +204,46 @@ def run_test_in_subprocess(func, n, n_p, req, task=None, do_print=False):
         #TODO: Return wrong and exc as well...
         return (count, n_p, elapsed, total, average)
 
+def np_gen(max_p):
+    n = 1
+    m = 1
+    while n<max_p:
+        for s in [1,2,5]:
+            np = s*m
+            if np<max_p:
+                yield np
+            else:
+                yield max_p
+                return
+        m *= 10
 
-def run_crud_tests(args, n, n_ps, tests, task=None, do_print=False):
+def run_crud_tests(args, tests, n, max_p, task=None, do_print=False):
+    n = args.n or n
+
+    max_p = min(max_p, n)
+    if args.p:
+        max_p = min(args.p, n)
+
+    if not args.s:
+        n_ps = [ n for n in np_gen(max_p) ]
+    else:
+        n_ps = [ int(s) for s in args.s.split(',')]
+
     results = []
     for n_p in n_ps:
         for op in ['create', 'read', 'update', 'delete']:
             req = tests[op]
             req['host'] = args.host
-            results.append(run_test_in_subprocess(do_test, n, n_p, req, task, do_print))
+            results.append(run_test_in_subprocess(args, do_test, n, n_p, req, task, do_print))
     return results
 
 
 def run_single_test(args, tests, task=None):
-    n = args.n
-    n_p = args.p
+    n = args.n or 1
+    n_p = args.p or 1
     req = tests[args.cmd]
     req['host'] = args.host
-    elapsed, count, total, count_wrong, count_exc = do_test(n, n_p, req, task)
+    elapsed, count, total, count_wrong, count_exc = do_test(args, n, n_p, req, task)
     if count:
         average=total/count
     else:

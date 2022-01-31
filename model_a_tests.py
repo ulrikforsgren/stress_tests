@@ -63,6 +63,6 @@ CRUD_TESTS = {
 if __name__ == '__main__':
     args = parseArgs(sys.argv[1:])
     if args.cmd == 'crud':
-        run_crud_tests(args, 500, [1, 2, 5, 10, 20, 40], CRUD_TESTS, do_print=True)
+        run_crud_tests(args, CRUD_TESTS, 500, max_p=40, do_print=True)
     else:
         run_single_test(args, CRUD_TESTS)
