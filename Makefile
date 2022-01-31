@@ -52,6 +52,7 @@ SINGLE-BUILD:
         fi
 	@touch SINGLE-BUILD
 
+
 .PHONY: lsa
 lsa: LSA-BUILD upper-nso lower-nso-1 lower-nso-2 venv
 
@@ -62,6 +63,15 @@ LSA-BUILD:
 	  exit 1; \
         fi
 	@touch LSA-BUILD
+
+# Setup complementary high-availability node(s)
+.PHONY: ha
+ha: check-build
+	@if [ -e SINGLE-BUILD ]; then \
+	  $(MAKE) follower/ncs.conf; \
+        fi
+	touch HA
+
 
 .PHONY: build-pkgs
 build-pkgs: pkg-repo/BUILT
@@ -82,6 +92,11 @@ venv/bin/activate:
 #
 
 ncs.conf:
+	ncs-setup --dest .
+
+follower/ncs.conf:
+	mkdir follower; \
+	cd follower; \
 	ncs-setup --dest .
 
 packages: build-pkgs
@@ -158,9 +173,28 @@ start: check-build
 
 .PHONY: start-single
 start-single:
+	@if [ ! -e HA ]; then \
+	  $(MAKE) start-single-noha; \
+	else \
+	  $(MAKE) start-single-ha; \
+	fi
+
+.PHONY: start-single-noha
+start-single-noha:
 	ncs
 	./initial_data/startup.sh
 
+.PHONY: start-single-ha
+start-single-ha:
+	NCS_IPC_PORT=4569 sname=n1 NCS_HA_NODE=n1 ncs -c ncs.conf
+	NCS_IPC_PORT=4569 ./initial_data/startup.sh
+	cd follower; NCS_IPC_PORT=4579 sname=n2 NCS_HA_NODE=n2 ncs -c ncs.conf
+	NCS_IPC_PORT=4579 ./initial_data/startup.sh
+
+cli-n1:
+	NCS_IPC_PORT=4569 ncs_cli -u admin -C
+cli-n2:
+	NCS_IPC_PORT=4579 ncs_cli -u admin -C
 
 .PHONY: start-lsa
 start-lsa:
@@ -180,13 +214,29 @@ stop: check-build
 
 .PHONY: stop-single
 stop-single:
+	@if [ ! -e HA ]; then \
+	  $(MAKE) stop-single-noha; \
+	else \
+	  $(MAKE) stop-single-ha; \
+	fi
+
+.PHONY: stop-single-noha
+stop-single-noha:
 	-ncs --stop
+
+.PHONY: stop-single-ha
+stop-single-ha:
+	-NCS_IPC_PORT=4569 ncs --stop
+	-NCS_IPC_PORT=4579 ncs --stop
+
 
 .PHONY: stop-lsa
 stop-lsa:
 	-NCS_IPC_PORT=4569 ncs --stop
 	-NCS_IPC_PORT=4570 ncs --stop
 	-NCS_IPC_PORT=4571 ncs --stop
+	pNCS_IPC_PORT=4569 ncs --stop
+	-NCS_IPC_PORT=4570 ncs --stop
 
 .PHONY: reset
 reset:
