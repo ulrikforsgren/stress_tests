@@ -48,7 +48,7 @@ CRUD_TESTS = {
 }
 
 
-async def timeout_task(client=None, parameters=Parameters(), op='', url='', data=''):
+async def timeout_task(client=None, parameters=Parameters(), host='', op='', url='', data=''):
     url = url.format_map(parameters)
     data = data.format_map(parameters)
     parameters.update_request()
@@ -61,6 +61,6 @@ async def timeout_task(client=None, parameters=Parameters(), op='', url='', data
 if __name__ == '__main__':
     args = parseArgs(sys.argv[1:])
     if args.cmd == 'crud':
-        run_crud_tests(args, 10, [1, 5, 10], CRUD_TESTS, task=timeout_task, do_print=True)
+        run_crud_tests(args, CRUD_TESTS, 10, max_p=10, task=timeout_task, do_print=True)
     else:
         run_single_test(args, CRUD_TESTS, task=timeout_task)
