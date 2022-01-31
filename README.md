@@ -44,6 +44,8 @@ So far these increments have come to mind:
 * Use argparse for host, port etc.
 * Use of -n for crud tests calc. step in the pattern 1,2,5,...
 * Option to override steps.
+* See if it is possible to make stresstesting.py independent of transport:
+  E.g. RESTCONF/NETCONF.
 
 ## Dimensions and Permutations ##
 
