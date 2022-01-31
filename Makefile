@@ -203,6 +203,14 @@ start-lsa:
 	cd lower-nso-2; NCS_IPC_PORT=4571 sname=lower-nso-2 ncs -c ncs.conf
 	initial_data/startup-lsa.sh
 
+.PHONY: start-fwserver
+start-fwserver:
+	python -m aiohttp.web -H localhost -P 8088 framework_server:main 2>/dev/null&
+
+.PHONY: stop-fwserver
+stop-fwserver:
+	pkill -laf framework_server:main
+
 .PHONY: stop
 stop: check-build
 	@if [ -e SINGLE-BUILD ]; then \
