@@ -183,7 +183,7 @@ def do_test(args, n, n_p, req, task=None):
 
     count, total, count_wrong, count_exc = calc_average(results)
 
-    return elapsed, count, total, count_wrong, count_exc
+    return elapsed, count, total, count_wrong, count_exc, results
 
 #
 # Run test in subprocess to ensure proper cleanup between test iterations.
@@ -191,18 +191,16 @@ def do_test(args, n, n_p, req, task=None):
 def run_test_in_subprocess(args, func, n, n_p, req, task=None, do_print=False):
     with Pool(processes=1) as pool:
         res = pool.apply(func, (args, n, n_p, req, task))
-        elapsed, count, total, count_wrong, count_exc = res
+        elapsed, count, total, count_wrong, count_exc, results = res
         if count:
             average=total/count
         else:
             average = -1
-        result = count, n_p, elapsed, total, average
         if do_print:
             op = req['op'].upper()
             print(f'{op:<6} {count:>5} {n_p:>3} {elapsed:>5.1f} {count/elapsed:>6.1f} {average:>6.3f} {count_wrong:>5} {count_exc:>5}')
         pool.close()
-        #TODO: Return wrong and exc as well...
-        return (count, n_p, elapsed, total, average)
+        return elapsed, count, total, average, count_wrong, count_exc, results
 
 def np_gen(max_p):
     n = 1
@@ -234,7 +232,7 @@ def run_crud_tests(args, tests, n, max_p, task=None, do_print=False):
         for op in ['create', 'read', 'update', 'delete']:
             req = tests[op]
             req['host'] = args.host
-            results.append(run_test_in_subprocess(args, do_test, n, n_p, req, task, do_print))
+            results.append((op, n, n_p, run_test_in_subprocess(args, do_test, n, n_p, req, task, do_print)))
     return results
 
 
@@ -243,7 +241,7 @@ def run_single_test(args, tests, task=None):
     n_p = args.p or 1
     req = tests[args.cmd]
     req['host'] = args.host
-    elapsed, count, total, count_wrong, count_exc = do_test(args, n, n_p, req, task)
+    elapsed, count, total, count_wrong, count_exc, results = do_test(args, n, n_p, req, task)
     if count:
         average=total/count
     else:
@@ -255,3 +253,6 @@ def run_single_test(args, tests, task=None):
     print("Average per request:", average)
     print("Wrong status:       ", count_wrong)
     print("Exceptions:         ", count_exc)
+
+    return (args.cmd, n, n_p, (elapsed, count, total, average, count_wrong, count_exc, results))
+
