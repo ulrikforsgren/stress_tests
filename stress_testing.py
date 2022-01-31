@@ -15,6 +15,18 @@ PORT=8080
 pprint = pp.PrettyPrinter(indent=4).pprint
 
 
+def parseArgs(args):
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--host', type=str,
+                        help='host[:port]',
+                        default='localhost:8080')
+    parser.add_argument('cmd', choices=['clean', 'create', 'read',
+                                        'update', 'delete', 'crud'])
+    parser.add_argument("-n", required=False, type=int, default=1)
+    parser.add_argument("-p", required=False, type=int, default=1)
+    return parser.parse_args(args)
+
+
 #
 # Classes to inject dynamic values for stressing requests.
 #
@@ -101,13 +113,13 @@ async def stress_requests(n, n_p, setup, teardown, task, args):
 
 
 
-async def default_task(client=None, parameters=Parameters(), op='', url='', data=''):
+async def default_task(client=None, parameters=Parameters(), host='', op='', url='', data=''):
     url = url.format_map(parameters)
     data = data.format_map(parameters)
     parameters.update_request()
     st = time.monotonic()
     resp = await restconf_request(client,
-                                  f'{HOST}:{PORT}',
+                                  host,
                                   op,
                                   url,
                                   data)
@@ -158,18 +170,6 @@ def calc_average(results):
     return count_ok, total_ok, count_wrong, count_exc
 
 
-def parseArgs(args):
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--host', type=str,
-                        help='host[:port]',
-                        default='localhost:8080')
-    parser.add_argument('cmd', choices=['clean', 'create', 'read',
-                                        'update', 'delete', 'crud'])
-    parser.add_argument("-n", required=False, type=int, default=1)
-    parser.add_argument("-p", required=False, type=int, default=1)
-    return parser.parse_args(args)
-
-
 def do_test(n, n_p, req, task=None):
     task = task or default_task
     st = time.monotonic()
@@ -205,6 +205,7 @@ def run_crud_tests(args, n, n_ps, tests, task=None, do_print=False):
     for n_p in n_ps:
         for op in ['create', 'read', 'update', 'delete']:
             req = tests[op]
+            req['host'] = args.host
             results.append(run_test_in_subprocess(do_test, n, n_p, req, task, do_print))
     return results
 
@@ -213,7 +214,7 @@ def run_single_test(args, tests, task=None):
     n = args.n
     n_p = args.p
     req = tests[args.cmd]
-
+    req['host'] = args.host
     elapsed, count, total, count_wrong, count_exc = do_test(n, n_p, req, task)
     if count:
         average=total/count

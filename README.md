@@ -41,7 +41,6 @@ So far these increments have come to mind:
 * Option to setup a docker environment. Adds possibility to see how network
   latency for NSO, HA and devices affects performance.
 * NETCONF transport support
-* Use argparse for host, port etc.
 * Use of -n for crud tests calc. step in the pattern 1,2,5,...
 * Option to override steps.
 * See if it is possible to make stresstesting.py independent of transport:
