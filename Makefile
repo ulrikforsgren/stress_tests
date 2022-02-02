@@ -87,14 +87,14 @@ ha: check-build
 .PHONY: ha-single
 ha-single:
 	ln -sf ../pkg-repo/manual-ha packages/.
-	./xmlmerge.py ncs.conf enable-ha-n1.xml > ha-n1-tmp.xml
+	. venv/bin/activate; ./xmlmerge.py ncs.conf enable-ha-n1.xml > ha-n1-tmp.xml
 	mv ha-n1-tmp.xml ncs.conf
 	cp initial_data/ha-config.xml ncs-cdb/.
 	$(MAKE) -s follower/ncs.conf
 	ln -sf ../../pkg-repo/model-a follower/packages/.
 	ln -sf ../../pkg-repo/manual-ha follower/packages/.
 	ln -sf ../local-start-java-vm follower/.
-	./xmlmerge.py follower/ncs.conf enable-ha-n2.xml > ha-n2-tmp.xml
+	. venv/bin/activate; ./xmlmerge.py follower/ncs.conf enable-ha-n2.xml > ha-n2-tmp.xml
 	mv ha-n2-tmp.xml follower/ncs.conf
 	cp initial_data/ha-config.xml follower/ncs-cdb/.
 
