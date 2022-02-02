@@ -20,7 +20,7 @@ the behavior of NSO depending on a number of factors:
 ## Strategy
 
 The framework is intended to be simplistic, easy to setup and parameterized to
-allow for setting up defferent envirionments and run tests to compare setups.
+allow for setting up different envirionments and run tests to compare setups.
 
 The first tests will just test CRUD of a simple model without involvment of any
 service functionality. Just to get the really basic performance and behavior of
@@ -41,10 +41,12 @@ So far these increments have come to mind:
 * Option to setup a docker environment. Adds possibility to see how network
   latency for NSO, HA and devices affects performance.
 * NETCONF transport support
-* Use of -n for crud tests calc. step in the pattern 1,2,5,...
-* Option to override steps.
 * See if it is possible to make stresstesting.py independent of transport:
   E.g. RESTCONF/NETCONF.
+* Run tests with -p open connections in parallel and reusing them to minimize
+  overhead of setting up connections.
+* Run tests with a streaming window of -p parallel connections. As soon as a
+  connection is free a new request will be pushed.
 
 ## Dimensions and Permutations ##
 
@@ -75,11 +77,29 @@ Other features:
 The current usage is limited to single node setup. The idea with LSA, HA and
 additional environment with Docker is in the pipeline.
 
+### Setup single system
+
     . <path-to-nso>/ncsrc
-    make single
+    make venv
     . venv/bin/activate
+    make single
     make start
-    ./stress_model_a.py create 1000 1
-    ./model-a_read_1000.py
-    ./stress_model_a.py clean 1 1
-    ./model-a_create_delete_100.py
+
+### Setup single system with HA - 2 nodes: n1, n2
+
+    . <path-to-nso>/ncsrc
+    make venv
+    . venv/bin/activate
+    make single ha
+    make start
+
+### Run tests
+
+    ./model_a_tests.py create -n 100
+    ./model_a_tests.py read -n 100
+    ./model_a_tests.py update -n 100
+    ./model_a_tests.py delete -n 100
+
+    ./model_a_tests.py clean
+
+    ./model_a_tests.py crud
