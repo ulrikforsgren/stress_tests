@@ -79,7 +79,7 @@ LSA-BUILD:
 ha: check-build
 	@if [ ! -e HA ]; then \
 	  if [ -e SINGLE-BUILD ]; then \
-	    $(MAKE) ha-single; \
+	    $(MAKE) -s ha-single; \
 	  fi; \
 	  touch HA; \
 	fi
@@ -90,7 +90,7 @@ ha-single:
 	./xmlmerge.py ncs.conf enable-ha-n1.xml > ha-n1-tmp.xml
 	mv ha-n1-tmp.xml ncs.conf
 	cp initial_data/ha-config.xml ncs-cdb/.
-	$(MAKE) follower/ncs.conf
+	$(MAKE) -s follower/ncs.conf
 	ln -sf ../../pkg-repo/model-a follower/packages/.
 	ln -sf ../../pkg-repo/manual-ha follower/packages/.
 	ln -sf ../local-start-java-vm follower/.
@@ -101,9 +101,9 @@ ha-single:
 .PHONY: ha-on
 ha-on: check-ha
 	@if [ -e SINGLE-BUILD ]; then \
-	    $(MAKE) ha-on-single; \
+	    $(MAKE) -s ha-on-single; \
 	fi
-	@$(MAKE) ha-status
+	@$(MAKE) -s ha-status
 
 .PHONY: ha-on-single
 ha-on-single:
@@ -114,9 +114,9 @@ ha-on-single:
 .PHONY: ha-off
 ha-off: check-ha
 	@if [ -e SINGLE-BUILD ]; then \
-	    $(MAKE) ha-off-single; \
+	    $(MAKE) -s ha-off-single; \
 	fi
-	@$(MAKE) ha-status
+	@$(MAKE) -s ha-status
 
 .PHONY: ha-off-single
 ha-off-single:
@@ -126,7 +126,7 @@ ha-off-single:
 .PHONY: ha-status
 ha-status: check-ha
 	@if [ -e SINGLE-BUILD ]; then \
-	    $(MAKE) ha-status-single; \
+	    $(MAKE) -s ha-status-single; \
 	fi
 
 .PHONY: ha-status-single
@@ -183,7 +183,7 @@ upper-nso: build-pkgs
 	for i in $(CFS_PACKAGES); do \
 	  ln -sf ../../pkg-repo/$${i} $@/packages/.; \
 	done
-	$(MAKE) $@/packages/rfs-vlan-ned
+	$(MAKE) -s $@/packages/rfs-vlan-ned
 	ln -s ${NCS_DIR}/packages/lsa/$(LSA_NED) $@/packages/.
 
 upper-nso/packages/rfs-vlan-ned:
@@ -226,18 +226,18 @@ clean:
 .PHONY: start
 start: check-build
 	@if [ -e SINGLE-BUILD ]; then \
-	  $(MAKE) start-single; \
+	  $(MAKE) -s start-single; \
 	fi
 	@if [ -e LSA-BUILD ]; then \
-	  $(MAKE) start-lsa; \
+	  $(MAKE) -s start-lsa; \
 	fi
 
 .PHONY: start-single
 start-single:
 	@if [ ! -e HA ]; then \
-	  $(MAKE) start-single-noha; \
+	  $(MAKE) -s start-single-noha; \
 	else \
-	  $(MAKE) start-single-ha; \
+	  $(MAKE) -s start-single-ha; \
 	fi
 
 .PHONY: start-single-noha
@@ -275,18 +275,18 @@ stop-fwserver:
 .PHONY: stop
 stop: check-build
 	@if [ -e SINGLE-BUILD ]; then \
-	  $(MAKE) stop-single; \
+	  $(MAKE) -s stop-single; \
 	fi
 	@if [ -e LSA-BUILD ]; then \
-	  $(MAKE) stop-lsa; \
+	  $(MAKE) -s stop-lsa; \
 	fi
 
 .PHONY: stop-single
 stop-single:
 	@if [ ! -e HA ]; then \
-	  $(MAKE) stop-single-noha; \
+	  $(MAKE) -s stop-single-noha; \
 	else \
-	  $(MAKE) stop-single-ha; \
+	  $(MAKE) -s stop-single-ha; \
 	fi
 
 .PHONY: stop-single-noha
