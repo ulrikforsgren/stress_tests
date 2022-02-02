@@ -1,28 +1,25 @@
 #!/usr/bin/env python3
 
-import re
+from copy import deepcopy
 import sys
 from  lxml import etree as ET
 
 """
 Actions:
  - merge (default)
+   - text
+   - subelements
  - add
  - replace
  - delete
 """
 
 # TODO:
-# - Define actions according to input:
-#    * with/without key
-#    * with/without subelements
-#    * lnode content: empty/one/multiple element(s)
 # - Write unit tests.
 # - Refactor code: arrange after action instead of 
-# - How to add new element adjecent to existing element(s)
-#    * Use index + insert
-# - Fix missing newlines for comments before root element.
 # - Add rules to control where to add e.g. before, after, ...
+# - Preserve empty lines and adjust fix indentation...
+# - Fix missing newlines for comments before root element.
 
 class MergeError(Exception):
     pass
@@ -31,7 +28,8 @@ def fix_indentation(lnode, rnode):
     # add indentation (note! any garbage text will be copied as well!)
     # remove one newline to not add one extra empty line
     # does not work for all indentations...
-    list(lnode)[-1:][0].tail += rnode.text.replace('\n', '', 1)
+#    list(lnode)[-1:][0].tail += rnode.text.replace('\n', '', 1)
+    pass
 
 def has_subelements(e):
     return len(e)>0
@@ -41,7 +39,7 @@ def no_subelements(e):
 
 def merge_tree(lnode, rnode):
     for c in rnode:
-        action = 'merge'
+        action = 'merge' # default
         if 'action' in c.attrib:
             action = c.attrib.get('action')
             del c.attrib['action']
@@ -53,6 +51,9 @@ def merge_tree(lnode, rnode):
                 if v is not None:
                     key = v.text.strip()
             del c.attrib['key'], v
+            if no_subelements(c):
+                raise MergeError('Attribute key can not be used with '
+                                 'text elements')
 
         lcs = lnode.findall(c.tag)
 
@@ -74,32 +75,72 @@ def merge_tree(lnode, rnode):
             else: # delete
                 pass
 
-        elif len(lcs) == 1: #  ========== One subelement ==========
+#        elif len(lcs) == 1: #  ========== One element ==========
+#
+#            if action == 'merge':
+#                #if has_subelements(c):
+#                #    merge_tree(lcs[0], c)
+#                #else:
+#                #    lnode.replace(lcs[0], c)
+#
+#                if no_subelements(c):
+#                    found = False
+#                    for lc in lcs:
+#                        if lc.text.strip() == c.text.strip():
+#                            found = True
+#                    if not found:
+#                        lnode.insert(lnode.index(lc)+1, deepcopy(c))
+#                        del found
+#                else:
+#                    if keyname is not None:
+#                        found = False
+#                        for lc in lcs:
+#                            k = lc.find(keyname)
+#                            if k is not None and k.text.strip() == key:
+#                                found = True
+#                                merge_tree(lc, deepcopy(c))
+#                        if not found:
+#                            lnode.insert(lnode.index(lc)+1, deepcopy(c))
+#                            del found
+#                    else:
+#                        for lc in lcs:
+#                            merge_tree(lc, deepcopy(c))
+#            elif action == 'replace':
+#                fix_indentation(lnode, rnode)
+#                lnode.replace(lcs[0], c)
+#
+#            elif action == 'delete':
+#                lnode.remove(lcs[0])
 
-            if action == 'merge':
-                if has_subelements(c):
-                    merge_tree(lcs[0], c)
-                else:
-                    lnode.replace(lcs[0], c)
-
-            elif action == 'replace':
-                fix_indentation(lnode, rnode)
-                lnode.replace(lcs[0], c)
-
-            elif action == 'delete':
-                lnode.remove(lcs[0])
-
-        else:          # ========== Multiple subelements ==========
+        else:          # ========== Multiple elements ==========
 
             if action == 'merge':
                 if no_subelements(c):
-                    raise MergeError('Action merge has no meaning when '
-                                         'there are multiple text only elements.')
-                else:
+                    found = False
                     for lc in lcs:
-                        k = lc.find(keyname)
-                        if k is not None and k.text.strip() == key:
-                            merge_tree(lc, c)
+                        if lc.text.strip() == c.text.strip():
+                            found = True
+                    if not found:
+                        lnode.insert(lnode.index(lc)+1, deepcopy(c))
+                        del found
+                else:
+                    if keyname is not None:
+                        found = False
+                        for lc in lcs:
+                            if keyname == '*':
+                                merge_tree(lc, deepcopy(c))
+                                found = True
+                            else:
+                                k = lc.find(keyname)
+                                if k is not None and k.text.strip() == key:
+                                    found = True
+                                    merge_tree(lc, deepcopy(c))
+                        if not found:
+                            lnode.insert(lnode.index(lc)+1, deepcopy(c))
+                            del found
+                    else:
+                        for lc in lcs:
+                            merge_tree(lc, deepcopy(c))
 
             elif action == 'replace':
                 if no_subelements(c):
@@ -127,11 +168,12 @@ def merge_tree(lnode, rnode):
                         if k is not None and k.text.strip() == key:
                             lnode.remove(lc)
 
-def main(files):
+def main(files, unit_test=False):
     ltree = None
     try:
+        parser = ET.XMLParser(remove_blank_text=True) if unit_test else None
         for filename in files:
-            doc = ET.parse(filename)
+            doc = ET.parse(filename, parser)
             if ltree is None:
                 ltree = doc
             else:
@@ -141,11 +183,12 @@ def main(files):
                 merge_tree(ltree.getroot(), doc.getroot())
 
         if ltree is not None:
-            print(ET.tostring(ltree).decode('utf-8'))
+            return 0, ET.tostring(ltree, pretty_print=unit_test).decode('utf-8')
     except MergeError as e:
-        print(f"ERROR: {e}")
-        sys.exit(1)
+        return 1, f"ERROR: {e}"
 
 
 if __name__ == "__main__":
-    main(sys.argv[1:])
+    status, xml = main(sys.argv[1:], True)
+    print(xml)
+    sys.exit(status)
