@@ -35,12 +35,21 @@ all:
 	@echo " * stop          stop environment"
 	@echo " * cli-<host>    start an NSO CLI in node/container <host>"
 
+
 .PHONY: check-build
 check-build:
 	@if [ ! -e SINGLE-BUILD -a ! -e LSA-BUILD ]; then \
 	  echo 'ERROR: You need to build before starting. Run "make single" or "make lsa" to build.'; \
 	  exit 1; \
         fi
+
+.PHONY: check-ha
+check-ha: check-build
+	@if [ ! -e HA ]; then \
+	  echo 'ERROR: Not built for HA Run "make ha" to setup complementary nodes.'; \
+	  exit 1; \
+	fi
+
 
 .PHONY: single
 single: SINGLE-BUILD packages ncs.conf venv initial-data
@@ -68,12 +77,61 @@ LSA-BUILD:
 # Setup complementary high-availability node(s)
 .PHONY: ha
 ha: check-build
-	@if [ -e SINGLE-BUILD ]; then \
-	  $(MAKE) follower/ncs.conf; \
-	  ln -s ../pkg-repo/manual-ha packages/.; \
-        fi
-	touch HA
+	@if [ ! -e HA ]; then \
+	  if [ -e SINGLE-BUILD ]; then \
+	    $(MAKE) ha-single; \
+	  fi; \
+	  touch HA; \
+	fi
 
+.PHONY: ha-single
+ha-single:
+	ln -sf ../pkg-repo/manual-ha packages/.
+	./xmlmerge.py ncs.conf enable-ha-n1.xml > ha-n1-tmp.xml
+	mv ha-n1-tmp.xml ncs.conf
+	cp initial_data/ha-config.xml ncs-cdb/.
+	$(MAKE) follower/ncs.conf
+	ln -sf ../../pkg-repo/model-a follower/packages/.
+	ln -sf ../../pkg-repo/manual-ha follower/packages/.
+	ln -sf ../local-start-java-vm follower/.
+	./xmlmerge.py follower/ncs.conf enable-ha-n2.xml > ha-n2-tmp.xml
+	mv ha-n2-tmp.xml follower/ncs.conf
+	cp initial_data/ha-config.xml follower/ncs-cdb/.
+
+.PHONY: ha-on
+ha-on: check-ha
+	@if [ -e SINGLE-BUILD ]; then \
+	    $(MAKE) ha-on-single; \
+	fi
+	@$(MAKE) ha-status
+
+.PHONY: ha-on-single
+ha-on-single:
+	echo "ha-config be-master" | NCS_IPC_PORT=4569 ncs_cli -u admin -C
+	sleep 2
+	echo "ha-config be-slave" | NCS_IPC_PORT=4579 ncs_cli -u admin -C
+
+.PHONY: ha-off
+ha-off: check-ha
+	@if [ -e SINGLE-BUILD ]; then \
+	    $(MAKE) ha-off-single; \
+	fi
+	@$(MAKE) ha-status
+
+.PHONY: ha-off-single
+ha-off-single:
+	echo "ha-config be-none" | NCS_IPC_PORT=4569 ncs_cli -u admin -C
+	echo "show ncs-state ha" | NCS_IPC_PORT=4569 ncs_cli -u admin -C
+
+.PHONY: ha-status
+ha-status: check-ha
+	@if [ -e SINGLE-BUILD ]; then \
+	    $(MAKE) ha-status-single; \
+	fi
+
+.PHONY: ha-status-single
+ha-status-single:
+	echo "show ncs-state ha" | NCS_IPC_PORT=4569 ncs_cli -u admin -C
 
 .PHONY: build-pkgs
 build-pkgs: pkg-repo/BUILT
@@ -191,7 +249,7 @@ start-single-noha:
 start-single-ha:
 	NCS_IPC_PORT=4569 sname=n1 NCS_HA_NODE=n1 ncs -c ncs.conf
 	NCS_IPC_PORT=4569 ./initial_data/startup.sh
-	cd follower; NCS_IPC_PORT=4579 sname=n2 NCS_HA_NODE=n2 ncs -c ncs.conf
+	(cd follower; NCS_IPC_PORT=4579 sname=n2 NCS_HA_NODE=n2 ncs -c ncs.conf)
 	NCS_IPC_PORT=4579 ./initial_data/startup.sh
 
 cli-n1:
