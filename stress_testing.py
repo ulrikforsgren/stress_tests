@@ -5,6 +5,7 @@ import argparse
 import asyncio
 from multiprocessing import Pool
 import pprint as pp
+import random
 import time
 
 from restconf_api import REQ_DISPATCH, setup, teardown, restconf_request
@@ -75,6 +76,14 @@ class SequenceBatch(Sequence):
         pass
     def update_batch(self):
         self.n += 1
+
+class RandomValue(Sequence):
+    def __init__(self, lower, upper):
+        super(RandomValue, self).__init__(0)
+        self.lower = lower
+        self.upper = upper
+    def __str__(self):
+        return str(random.randint(self.lower, self.upper))
 
 # class Parameters makes it possible provide parameters in the form of {x} in
 # url and data strings.

@@ -4,7 +4,7 @@
 import sys
 
 from stress_testing import parseArgs, Parameters, SequenceRequest,\
-                           run_crud_tests, run_single_test
+                           RandomValue, run_crud_tests, run_single_test
 
 
 # Inject paramaters that can be update on multiple levels when iterating:
@@ -14,6 +14,7 @@ from stress_testing import parseArgs, Parameters, SequenceRequest,\
 #
 parameters = Parameters({
     "id": SequenceRequest(0),
+    "data": RandomValue(0, 4000000000),
 })
 
 
@@ -47,7 +48,7 @@ CRUD_TESTS = {
             'url': '/model-a:model-a/model-a:list=K{id}',
             'data': '''{{
                         "list":{{
-                            "str-value":"Changed string data {id}"
+                            "str-value":"Changed string data {data}"
                         }}
                     }}''',
             'parameters': parameters
