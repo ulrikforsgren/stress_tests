@@ -2,7 +2,6 @@
 # the packages. Typically generated namespaces are used by other packages.
 SINGLE_PACKAGES =  model-a
 
-
 ifeq "$(NCS_DIR)" ""
 $(error NCS_DIR is not setup. Source ncsrc to setup NSO environment before proceeding)
 endif
@@ -24,12 +23,14 @@ endif
 
 .PHONY: all
 all:
-	@echo "Current build: $(wildcard *-BUILD)"
+	@echo "Current build:     $(wildcard *-BUILD)"
+	@echo "HA setup:          $(wildcard HA)"
 	@echo "NSO major version: $(NSO_MAJOR_VERSION) ($(NSO_VERSION))"
 	@echo
 	@echo "Makefile rules:"
 	@echo " * single        Setup a single node NSO system."
 	@echo " * lsa           Setup an LSA NSO system with one CFS and two RFS nodes."
+	@echo " * ha            Setup complementary nodes for HA."
 	@echo " * start         start environment"
 	@echo " * stop          stop environment"
 	@echo " * cli-<host>    start an NSO CLI in node/container <host>"
@@ -69,6 +70,7 @@ LSA-BUILD:
 ha: check-build
 	@if [ -e SINGLE-BUILD ]; then \
 	  $(MAKE) follower/ncs.conf; \
+	  ln -s ../pkg-repo/manual-ha packages/.; \
         fi
 	touch HA
 
@@ -158,7 +160,8 @@ clean:
 	rm -rf README.ncs
 	rm -rf __pycache__
 	rm -f *.log
-	rm -f SINGLE-BUILD LSA-BUILD
+	rm -f SINGLE-BUILD LSA-BUILD HA
+	rm -rf follower
 	@echo "NOTE! Directory 'venv' is not removed."
 	@echo "      It must be manually deleted to be rebuilt."
 
