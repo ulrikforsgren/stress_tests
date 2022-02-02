@@ -3,7 +3,7 @@
 import unittest
 import difflib
 
-from xmlmerge4 import merge_tree, MergeError
+from xmlmerge import merge_tree, MergeError
 from lxml import etree
 
 
@@ -16,9 +16,12 @@ class MergeXMLTestCase(unittest.TestCase):
         return etree.tostring(ltree, pretty_print=True).decode('utf-8')
 
 
-class NothingTestCase(MergeXMLTestCase):
 
-   def test_merge_nothing(self):
+
+
+class MergeTestCase(MergeXMLTestCase):
+
+   def test_nothing(self):
         l = """\
 <config>
 </config>
@@ -33,10 +36,6 @@ class NothingTestCase(MergeXMLTestCase):
 """
         xml = self.merge_xml(r, l)
         self.assertEqual(xml, o)
-
-
-
-class MergeTestCase(MergeXMLTestCase):
 
    def test_not_existing(self):
         l = """\
@@ -138,8 +137,10 @@ class MergeTestCase(MergeXMLTestCase):
   <b key="*">Bee</b>
 </config>
 """
-        with self.assertRaises(MergeError):
+        with self.assertRaises(MergeError) as e:
             xml = self.merge_xml(l, r)
+        self.assertEqual(e.exception.args, ('Attribute key can not be used '
+                                            'with text only elements.',))
 
    def test_key_non_existing(self):
         l = """\
@@ -293,6 +294,465 @@ class MergeTestCase(MergeXMLTestCase):
     <age>42</age>
   </a>
 </config>
+"""
+        xml = self.merge_xml(l, r)
+        self.assertEqual(xml, o)
+
+
+
+
+class ReplaceTestCase(MergeXMLTestCase):
+
+   def test_text_empty(self):
+        l = """\
+<config>
+</config>
+"""
+        r = """\
+<config>
+  <b  action="replace">Ahh</b>
+</config>
+"""
+        with self.assertRaises(MergeError) as e:
+            xml = self.merge_xml(l, r)
+
+   def test_text_exist(self):
+        l = """\
+<config>
+  <b>Ahh</b>
+</config>
+"""
+        r = """\
+<config>
+  <b  action="replace">Bee</b>
+</config>
+"""
+        with self.assertRaises(MergeError) as e:
+            xml = self.merge_xml(l, r)
+        self.assertEqual(e.exception.args, ('Action replace can not be used '
+                                            'with text only elements.',))
+
+   def test_text_key(self):
+        l = """\
+<config>
+</config>
+"""
+        r = """\
+<config>
+  <b  action="replace" key="*">Bee</b>
+</config>
+"""
+        with self.assertRaises(MergeError) as e:
+            xml = self.merge_xml(l, r)
+        self.assertEqual(e.exception.args, ('Attribute key can not be used '
+                                            'with text only elements.',))
+
+   def test_key_non_existing(self):
+        l = """\
+<config>
+</config>
+"""
+        r = """\
+<config>
+  <a action="replace" key="name">
+    <name>Kilroy</name>
+    <age>42</age>
+  </a>
+</config>
+"""
+        o = """\
+<config>
+<a><name>Kilroy</name><age>42</age></a></config>
+"""
+        xml = self.merge_xml(l, r)
+        self.assertEqual(xml, o)
+
+   def test_key_non_existing2(self):
+        l = """\
+<config>
+  <a>
+    <name>Foo</name>
+    <length>5'4"</length>
+  </a>
+</config>
+"""
+        r = """\
+<config>
+  <a action="replace" key="name">
+    <name>Kilroy</name>
+    <age>42</age>
+  </a>
+</config>
+"""
+        o = """\
+<config>
+  <a>
+    <name>Foo</name>
+    <length>5'4"</length>
+  </a>
+  <a>
+    <name>Kilroy</name>
+    <age>42</age>
+  </a>
+</config>
+"""
+        xml = self.merge_xml(l, r)
+        self.assertEqual(xml, o)
+
+   def test_key_existing(self):
+        l = """\
+<config>
+  <a>
+    <name>Foo</name>
+    <weight>140</weight>
+  </a>
+  <a>
+    <name>Kilroy</name>
+    <length>6'2"</length>
+  </a>
+</config>
+"""
+        r = """\
+<config>
+  <a action="replace" key="name">
+    <name>Kilroy</name>
+    <age>42</age>
+  </a>
+</config>
+"""
+        o = """\
+<config>
+  <a>
+    <name>Foo</name>
+    <weight>140</weight>
+  </a>
+  <a>
+    <name>Kilroy</name>
+    <age>42</age>
+  </a>
+</config>
+"""
+        xml = self.merge_xml(l, r)
+        self.assertEqual(xml, o)
+
+   def test_key_existing2(self):
+        l = """\
+<config>
+  <a>
+    <name>Foo</name>
+  </a>
+  <a>
+    <name>Kilroy</name>
+    <length>6'2"</length>
+  </a>
+  <a>
+    <name>Kilroy</name>
+    <weight>190</weight>
+  </a>
+</config>
+"""
+        r = """\
+<config>
+  <a action="replace" key="name">
+    <name>Kilroy</name>
+    <age>42</age>
+  </a>
+</config>
+"""
+        o = """\
+<config>
+  <a>
+    <name>Foo</name>
+  </a>
+  <a>
+    <name>Kilroy</name>
+    <age>42</age>
+  </a>
+  <a>
+    <name>Kilroy</name>
+    <age>42</age>
+  </a>
+</config>
+"""
+        xml = self.merge_xml(l, r)
+        self.assertEqual(xml, o)
+
+   def test_key_wildcard(self):
+        l = """\
+<config>
+  <a>
+    <name>Foo</name>
+  </a>
+  <a>
+    <name>Kilroy</name>
+  </a>
+</config>
+"""
+        r = """\
+<config>
+  <a action="replace" key="*">
+    <age>42</age>
+  </a>
+</config>
+"""
+        o = """\
+<config>
+  <a>
+    <age>42</age>
+  </a>
+  <a>
+    <age>42</age>
+  </a>
+</config>
+"""
+        xml = self.merge_xml(l, r)
+        self.assertEqual(xml, o)
+
+
+
+class AddTestCase(MergeXMLTestCase):
+
+   def test_text_empty(self):
+        l = """\
+<config>
+</config>
+"""
+        r = """\
+<config>
+  <b  action="add">Ahh</b>
+  <b  action="add">Ahh</b>
+  <b  action="add">Bee</b>
+</config>
+"""
+        o = """\
+<config>
+<b>Ahh</b><b>Ahh</b><b>Bee</b></config>
+"""
+        xml = self.merge_xml(l, r)
+        self.assertEqual(xml, o)
+
+   def test_text_exist(self):
+        l = """\
+<config>
+  <b>Ahh</b>
+  <b>Bee</b>
+</config>
+"""
+        r = """\
+<config>
+  <b  action="add">Ahh</b>
+  <b  action="add">Bee</b>
+  <b  action="add">Cee</b>
+</config>
+"""
+        o = """\
+<config>
+  <b>Ahh</b>
+  <b>Bee</b>
+  <b>Ahh</b>
+  <b>Bee</b>
+  <b>Cee</b>
+</config>
+"""
+        xml = self.merge_xml(l, r)
+        self.assertEqual(xml, o)
+
+   def test_text_key(self):
+        l = """\
+<config>
+</config>
+"""
+        r = """\
+<config>
+  <b  action="add" key="*">Bee</b>
+</config>
+"""
+        with self.assertRaises(MergeError) as e:
+            xml = self.merge_xml(l, r)
+        self.assertEqual(e.exception.args, ('Attribute key can not be used '
+                                            'with action add.',))
+
+   def test_key(self):
+        l = """\
+<config>
+  <a>
+    <name>Kilroy</name>
+  </a>
+</config>
+"""
+        r = """\
+<config>
+  <a action="add" key="name">
+    <name>Kilroy</name>
+    <age>42</age>
+  </a>
+</config>
+"""
+        with self.assertRaises(MergeError) as e:
+            xml = self.merge_xml(l, r)
+        self.assertEqual(e.exception.args, ('Attribute key can not be used '
+                                            'with action add',))
+
+
+
+class DeleteTestCase(MergeXMLTestCase):
+
+   def test_text_empty(self):
+        l = """\
+<config>
+</config>
+"""
+        r = """\
+<config>
+  <b  action="delete">Ahh</b>
+  <b  action="delete">Bee</b>
+</config>
+"""
+        o = """\
+<config>
+</config>
+"""
+        xml = self.merge_xml(l, r)
+        self.assertEqual(xml, o)
+
+   def test_text_exist(self):
+        l = """\
+<config>
+  <b>Ahh</b>
+  <b>Bee</b>
+</config>
+"""
+        r = """\
+<config>
+  <b  action="delete">Bee</b>
+  <b  action="delete">Cee</b>
+</config>
+"""
+        o = """\
+<config>
+  <b>Ahh</b>
+</config>
+"""
+        xml = self.merge_xml(l, r)
+        self.assertEqual(xml, o)
+
+   def test_text_all(self):
+        l = """\
+<config>
+  <b>Ahh</b>
+  <b>Bee</b>
+</config>
+"""
+        r = """\
+<config>
+  <b  action="delete"/>
+</config>
+"""
+        o = """\
+<config/>
+"""
+        xml = self.merge_xml(l, r)
+        self.assertEqual(xml, o)
+
+   def test_text_key(self):
+        l = """\
+<config>
+</config>
+"""
+        r = """\
+<config>
+  <b  action="delete" key="*">Bee</b>
+</config>
+"""
+        with self.assertRaises(MergeError) as e:
+            xml = self.merge_xml(l, r)
+        # TODO: This exception should be changed. It indicates that it can
+        #       be used for other elements.
+        self.assertEqual(e.exception.args, ('Attribute key can not be used '
+                                            'with text only elements.',))
+
+   def test_key(self):
+        l = """\
+<config>
+  <a>
+    <name>Foo</name>
+  </a>
+  <a>
+    <name>Kilroy</name>
+  </a>
+</config>
+"""
+        r = """\
+<config>
+  <a action="delete" key="name">
+    <name>Kilroy</name>
+  </a>
+</config>
+"""
+        o = """\
+<config>
+  <a>
+    <name>Foo</name>
+  </a>
+</config>
+"""
+        xml = self.merge_xml(l, r)
+        self.assertEqual(xml, o)
+
+   def test_key2(self):
+        l = """\
+<config>
+  <a>
+    <name>Foo</name>
+  </a>
+  <a>
+    <name>Kilroy</name>
+  </a>
+  <a>
+    <name>Kilroy</name>
+  </a>
+</config>
+"""
+        r = """\
+<config>
+  <a action="delete" key="name">
+    <name>Kilroy</name>
+  </a>
+</config>
+"""
+        o = """\
+<config>
+  <a>
+    <name>Foo</name>
+  </a>
+</config>
+"""
+        xml = self.merge_xml(l, r)
+        self.assertEqual(xml, o)
+
+   def test_key_wildcard(self):
+        l = """\
+<config>
+  <a>
+    <name>Foo</name>
+  </a>
+  <a>
+    <name>Kilroy</name>
+  </a>
+  <a>
+    <name>Kilroy</name>
+  </a>
+</config>
+"""
+        r = """\
+<config>
+  <a action="delete" key="*">
+    <name>Kilroy</name>
+  </a>
+</config>
+"""
+        o = """\
+<config/>
 """
         xml = self.merge_xml(l, r)
         self.assertEqual(xml, o)
