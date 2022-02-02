@@ -47,12 +47,9 @@ parameters = Parameters({
 })
 """
 class Sequence:
-    def __init__(self, n, ffunc=None):
+    def __init__(self, n):
         self.n = n
-        # Unfortunately lamdba can't be pickled to a subprocess.
-#        self.ffunc = ffunc or (lambda s: str(s))
     def __str__(self):
-        #s = self.ffunc(self.n)
         s = str(self.n)
         self.update_str()
         return s
@@ -64,16 +61,16 @@ class Sequence:
         pass
 
 class SequenceRequest(Sequence):
-    def __init__(self, n, ffunc=None):
-        super(SequenceRequest, self).__init__(n, ffunc)
+    def __init__(self, n):
+        super(SequenceRequest, self).__init__(n)
     def update_str(self):
         pass
     def update_request(self):
         self.n += 1
 
 class SequenceBatch(Sequence):
-    def __init__(self, n, ffunc=None):
-        super(SequenceBatch, self).__init__(n, ffunc)
+    def __init__(self, n):
+        super(SequenceBatch, self).__init__(n)
     def update_str(self):
         pass
     def update_batch(self):
