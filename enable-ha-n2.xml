@@ -1,0 +1,45 @@
+
+<ncs-config xmlns="http://tail-f.com/yang/tailf-ncs-config">
+
+  <webui>
+    <enabled>true</enabled>
+    <transport>
+      <tcp>
+        <port>8090</port>
+      </tcp>
+    </transport>
+  </webui>
+
+  <netconf-north-bound>
+    <enabled>true</enabled>
+    <transport>
+      <ssh>
+        <port>2032</port>
+      </ssh>
+      <tcp>
+        <port>2033</port>
+      </tcp>
+    </transport>
+  </netconf-north-bound>
+
+  <cli>
+    <enabled>true</enabled>
+    <ssh>
+      <port>2034</port>
+    </ssh>
+  </cli>
+
+  <ncs-ipc-address action="replace">
+    <ip>127.0.0.1</ip>
+    <port>4579</port>
+  </ncs-ipc-address>
+
+  <ha action="replace">
+    <enabled>true</enabled>
+  </ha>
+
+  <java-vm action="replace">
+    <start-command>./local-start-java-vm</start-command>
+  </java-vm>
+
+</ncs-config>
