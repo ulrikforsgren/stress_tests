@@ -34,6 +34,15 @@ def has_subelements(e):
 def no_subelements(e):
     return len(e)==0
 
+def cleanup_attributes(node):
+    for c in node:
+        if 'action' in c.attrib:
+            del c.attrib['action']
+        if 'key' in c.attrib:
+            del c.attrib['key']
+        if has_subelements(c):
+            cleanup_attributes(c)
+
 def merge_tree(lnode, rnode):
     for c in rnode:
         action = 'merge' # default
@@ -90,13 +99,11 @@ def merge_tree(lnode, rnode):
 
             if action == 'merge':
                 if no_subelements(c):
-                    found = False
+                    pos = lnode.index(lcs[0])
                     for lc in lcs:
-                        if lc.text.strip() == c.text.strip():
-                            found = True
-                    if not found:
-                        lnode.insert(lnode.index(lc)+1, deepcopy(c))
-                        del found
+                        lnode.remove(lc)
+                    lnode.insert(pos, deepcopy(c))
+                    del pos
                 else:
                     if keyname is not None:
                         found = False
@@ -170,6 +177,7 @@ def main(files, unit_test=False):
                 merge_tree(ltree.getroot(), doc.getroot())
 
         if ltree is not None:
+            cleanup_attributes(ltree.getroot())
             return 0, ET.tostring(ltree, pretty_print=unit_test).decode('utf-8')
     except MergeError as e:
         return 1, f"ERROR: {e}"

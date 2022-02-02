@@ -6,6 +6,12 @@ import difflib
 from xmlmerge import merge_tree, MergeError
 from lxml import etree
 
+# TODO:
+#  - Verify that action and key are removed from output...
+#    e.g. copy a subtree
+#  - Test for different type of elements: text only vs. contains subelements.
+
+
 
 class MergeXMLTestCase(unittest.TestCase):
     def merge_xml(self, l, r):
@@ -80,7 +86,6 @@ class MergeTestCase(MergeXMLTestCase):
     <name>Kilroy</name>
     <age>42</age>
   </a>
-  <b>Ahh</b>
   <b>Bee</b>
 </config>
 """
@@ -118,8 +123,6 @@ class MergeTestCase(MergeXMLTestCase):
     <name>Kilroy</name>
     <age>42</age>
   </a>
-  <b>Ahh</b>
-  <b>Ahh</b>
   <b>Bee</b>
 </config>
 """
