@@ -266,11 +266,14 @@ start-lsa:
 
 .PHONY: start-fwserver
 start-fwserver:
-	python -m aiohttp.web -H localhost -P 8088 framework_server:main 2>/dev/null&
+	#python -m aiohttp.web -H localhost -P 8088 framework_server:main 2>/dev/null&
+	./framework_server.py 2>/dev/null&
+	echo "It is now started in the background."
 
 .PHONY: stop-fwserver
 stop-fwserver:
-	pkill -laf framework_server:main
+	#pkill -laf framework_server:main
+	pkill -laf framework_server.py
 
 .PHONY: stop
 stop: check-build

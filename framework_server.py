@@ -34,4 +34,5 @@ def main(argv):
     return app
 
 if __name__ == '__main__':
-    main(sys.argv)
+    web.run_app(main(sys.argv), port = 8088)
+
