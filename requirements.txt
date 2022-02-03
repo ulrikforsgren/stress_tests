@@ -1,2 +1,4 @@
 aiohttp>3.8
 lxml>4.7
+matplotlib
+numpy
