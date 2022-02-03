@@ -11,15 +11,22 @@ import time
 from threading import Thread
 
 import matplotlib.pyplot as plt
-from matplotlib.animation import FuncAnimation
+import matplotlib.animation as animation
 import numpy as np
 
 from stress_testing import setup, teardown, default_task, Parameters,\
-                           SequenceRequest, RandomValue
+                           SequenceRequest, RandomValue, single_request
 
 class DataQueue(queue.Queue):
+    """
+    DataQueue provides a FIFO type queue where, where the get
+    method return all currently queued items in one chunk.
+    It uses a socketpair to provide the synchronization needed
+    to get the number of currently queued items.
+    """
     def __init__(self, maxsize=0):
         super().__init__(maxsize)
+        # It might be possible to use a diggre
         self.r, self.w = socket.socketpair()
         self.r.setblocking(False)
     def get(self, block=True, timeout=None):
@@ -37,20 +44,25 @@ class DataQueue(queue.Queue):
     def fileno(self):
         return self.r.fileno()
 
+
+stop_requests = False
 async def stress_requests_stream(n, n_p, setup, teardown, task, args):
+    global stop_requests
     tasks = set()
 
     await setup(args)
 
+    # Start initial tasks, but no more than n_p
     for _ in range(0, min(n, n_p)):
         tasks.add(asyncio.create_task(task(**args)))
-    n -= min(n, n_p) # Started initial tasks
+    n -= min(n, n_p)
 
-    while len(tasks)>0:
+    while len(tasks)>0 and not stop_requests:
         done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
         for d in done:
             result = await d
             q.put(result)
+        # Start new tasks, but no more than n_p in total.
         a = n_p-len(pending)  # Calculate number of free task slots
         tasks_to_start = min(a, n)
         for _ in range(0, tasks_to_start): # Start tasks in available slots
@@ -62,14 +74,13 @@ async def stress_requests_stream(n, n_p, setup, teardown, task, args):
 
 
 
-async def async_generator(q):
+async def request_task(q):
     parameters = Parameters({
         "id": SequenceRequest(0, wrap=100),
         "data": RandomValue(0, 4000000000),
     })
     args = {
-            'op': 'update',
-            'url': '/model-a:model-a/model-a:list=K{id}',
+            'op': 'update', 'url': '/model-a:model-a/model-a:list=K{id}',
             'data': '''{{
                         "list":{{
                             "str-value":"Changed string data {data}"
@@ -78,10 +89,13 @@ async def async_generator(q):
             'parameters': parameters
     }
     args['host'] = 'localhost:8080'
-    await stress_requests_stream(30000, 10, setup, teardown, default_task, args)
 
-def generator_thread(q):
-    asyncio.run(async_generator(q))
+    # Just run for a very long time...
+    await stress_requests_stream(1000000, 10, setup, teardown,
+                                 default_task, args)
+
+def request_thread(q):
+    asyncio.run(request_task(q))
 
 x = []
 y = []
@@ -95,12 +109,16 @@ t_prev = time.monotonic()
 
 def func_animate(i):
     global x,y,n,q,t_prev
-    x += [n]
     l = len(q.get())
     t_now = time.monotonic()
     elapsed = t_now-t_prev
     y += [l/elapsed]
     n += 1
+
+    if len(y)<=300:
+        x += [n]
+    else:
+        y.pop(0)
 
     line.set_data(x, y)
 
@@ -108,16 +126,15 @@ def func_animate(i):
     return line,
 
 q = DataQueue(maxsize=8192)
-ani = FuncAnimation(figure,
+ani = animation.FuncAnimation(figure,
                     func_animate,
-                    frames=10,
+                    frames=1,
                     interval=1000)
 
-#ani.save(r'animation.gif', fps=10)
 
-
-thread = Thread(target=generator_thread, args=(q,))
+thread = Thread(target=request_thread, args=(q,))
 thread.start()
 
 plt.show()
+stop_requests = True
 sys.exit(1)
