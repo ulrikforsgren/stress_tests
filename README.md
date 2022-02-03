@@ -47,6 +47,10 @@ So far these increments have come to mind:
   overhead of setting up connections.
 * Run tests with a streaming window of -p parallel connections. As soon as a
   connection is free a new request will be pushed.
+* Control and get HA status using RESTCONF
+* Rule to test connection. Good as a sanity check prior to running a test.
+* Run a transaction sustain test and turning ha on/off during test.
+* Provide credentials to restconf_api.
 
 ## Dimensions and Permutations ##
 
