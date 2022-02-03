@@ -62,12 +62,15 @@ class Sequence:
         pass
 
 class SequenceRequest(Sequence):
-    def __init__(self, n):
+    def __init__(self, n, wrap=None):
         super(SequenceRequest, self).__init__(n)
+        self.wrap = wrap
     def update_str(self):
         pass
     def update_request(self):
         self.n += 1
+        if self.wrap is not None:
+            self.n = self.n % self.wrap
 
 class SequenceBatch(Sequence):
     def __init__(self, n):
@@ -105,6 +108,9 @@ class Parameters(dict):
                 v.update_batch()
 
 
+#
+# n_p connections are setup and reused for the whole test.
+#
 async def stress_requests(n, n_p, setup, teardown, task, args):
     results = []
     await setup(args)
@@ -119,7 +125,51 @@ async def stress_requests(n, n_p, setup, teardown, task, args):
     await teardown(args)
     return results
 
+#
+# n_p connections are setup for each batch then closed
+#
+async def stress_requests_batch(n, n_p, setup, teardown, task, args):
+    results = []
+    while n>0: # Execute requests in batches of n_p in parellel.
+        if n<n_p: n_p = n
+        await setup(args)
+        tasks = [ asyncio.create_task(task(**args))
+                  for p in range(0,n_p)]
+        results += await asyncio.gather(*tasks)
+        await teardown(args)
+        if 'parameters' in args:
+            args['parameters'].update_batch()
+        n -= n_p
+    return results
 
+#
+# n_p connections are setup and new requests and sent as a connection
+# becomes available.
+#
+async def stress_requests_stream(n, n_p, setup, teardown, task, args):
+    results = []
+    tasks = set()
+
+    await setup(args)
+
+    for _ in range(0, min(n, n_p)):
+        tasks.add(asyncio.create_task(task(**args)))
+    n -= min(n, n_p) # Started initial tasks
+
+    while len(tasks)>0:
+        done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+        for d in done:
+            result = await d
+            results.append(result)
+        a = n_p-len(pending)  # Calculate number of free task slots
+        tasks_to_start = min(a, n)
+        for _ in range(0, tasks_to_start): # Start tasks in available slots
+            pending.add(asyncio.create_task(task(**args)))
+        n -= tasks_to_start
+        tasks = pending
+
+    await teardown(args)
+    return results
 
 async def default_task(client=None, parameters=Parameters(), host='', op='', url='', data=''):
     url = url.format_map(parameters)
