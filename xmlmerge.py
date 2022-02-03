@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- mode: python; python-indent: 4 -*-
 
 from copy import deepcopy
 import sys

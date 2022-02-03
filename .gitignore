@@ -1,1 +1,8 @@
 *.pyc
+ncs-cdb/
+logs/
+packages/
+state/
+storedstate
+follower/
+venv/
