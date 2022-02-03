@@ -171,7 +171,16 @@ async def stress_requests_stream(n, n_p, setup, teardown, task, args):
     await teardown(args)
     return results
 
-async def default_task(client=None, parameters=Parameters(), host='', op='', url='', data=''):
+async def single_request(args, setup=setup, teardown=teardown):
+    # Setup connection pool
+    await setup(args)
+    result = await default_task(**args)
+    # Cleanup connection pool
+    await teardown(args)
+    return result
+
+async def default_task(client=None, parameters=Parameters(), host='', op='',
+                       url='', data='', resource_type='data'):
     url = url.format_map(parameters)
     data = data.format_map(parameters)
     parameters.update_request()
@@ -180,7 +189,8 @@ async def default_task(client=None, parameters=Parameters(), host='', op='', url
                                   host,
                                   op,
                                   url,
-                                  data)
+                                  data,
+                                  resource_type)
     elapsed = time.monotonic()-st
     return (*resp, elapsed)
 

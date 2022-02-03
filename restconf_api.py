@@ -17,7 +17,8 @@ REQ_DISPATCH = {
     'create': ('POST', 201),
     'read':   ('GET', 200),
     'update': ('PATCH', 204),
-    'delete': ('DELETE', 204)
+    'delete': ('DELETE', 204),
+    'action': ('POST', 204)
 }
 
 
@@ -32,12 +33,13 @@ async def teardown(args):
 
 
 request_id = 0
-async def restconf_request(client, host, op, resource, data=None, params=None):
+async def restconf_request(client, host, op, resource, data=None,
+                           resource_type='data', params=None):
     global request_id
     request_id += 1
     rid = request_id
     method, expected_status = REQ_DISPATCH[op]
-    url = f'http://{host}/restconf/data{resource}'
+    url = f'http://{host}/restconf/{resource_type}{resource}'
     try:
         async with client.request(method, url, headers=HEADERS_JSON,
                                   data=data.encode('utf-8'),
