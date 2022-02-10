@@ -3,6 +3,7 @@
 
 import argparse
 import asyncio
+import json
 from multiprocessing import Pool
 import pprint as pp
 import random
@@ -27,6 +28,7 @@ def parseArgs(args):
     parser.add_argument("-p", required=False, type=int)
     parser.add_argument("-s", required=False, type=str)
     parser.add_argument("-v", required=False, action='store_true', default=False)
+    parser.add_argument("--json", required=False, type=str)
     return parser.parse_args(args)
 
 
@@ -299,6 +301,8 @@ def run_crud_tests(args, tests, n, max_p, task=None, do_print=False):
             req = tests[op]
             req['host'] = args.host
             results.append((op, n, n_p, run_test_in_subprocess(args, do_test, n, n_p, req, task, do_print)))
+    if args.json:
+        open(args.json, "w").write(json.dumps(results))
     return results
 
 
