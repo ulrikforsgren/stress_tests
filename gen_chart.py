@@ -127,7 +127,7 @@ def transform_crud_results(results):
         t,n,p,res_rtp = res_p
         elapsed,_,_,avg,_,_,res_r = res_rtp
         # Collect details
-        data = [round(1/r[4],2) for r in res_r]
+        data = [round(r[4],6) for r in res_r]
         d = get_dict(total_details, p)
         d[t] = data
         # Collect summary
@@ -152,5 +152,5 @@ if __name__ == '__main__':
     addSummaryChart('Transactional throughput with parallel requests', summary_rate)
     addSummaryChart('Average request time with parallel requests', summary_avg)
     for p, details in total_details.items():
-        addDetailedChart(f"Transactional throughput for each request - {p} parallel requests", details)
+        addDetailedChart(f"Time for each request - {p} parallel requests", details)
     print(FOOTER)
