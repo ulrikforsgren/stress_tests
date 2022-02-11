@@ -96,13 +96,17 @@ FOOTER = """
   </body> </html>
 """
 
-def addSummaryChart(title, data):
-    print('var data =', json.dumps(data))
-    print(f'CRUDChart(addChart("{title}"), labels, data);')
+def addSummaryChart(f, title, data):
+    f.write('var data =')
+    f.write(json.dumps(data))
+    f.write(';')
+    f.write(f'CRUDChart(addChart("{title}"), labels, data);')
 
-def addDetailedChart(title, data):
-    print('var data =', json.dumps(data))
-    print(f'CRUDChartDetails(addChart("{title}"), data);')
+def addDetailedChart(f, title, data):
+    f.write('var data =')
+    f.write(json.dumps(data))
+    f.write(';')
+    f.write(f'CRUDChartDetails(addChart("{title}"), data);')
 
 
 # Get a dict from a dict. Add if not found
@@ -125,32 +129,42 @@ def transform_crud_results(results):
     summary_labels = []
     for res_p in results: # iterate over p
         t,n,p,res_rtp = res_p
-        elapsed,_,_,avg,_,_,res_r = res_rtp
+        elapsed,n_success,_,avg,_,_,res_r = res_rtp
         # Collect details
-        data = [round(r[4],6) for r in res_r]
+        data = []
+        for r in res_r:
+            i,s,*rest = r
+            if s == 'ok':
+                data.append(round(rest[2],6))
+            else:
+                data.append(None)
         d = get_dict(total_details, p)
         d[t] = data
         # Collect summary
         if t == 'create': summary_labels.append(p)
-        l = get_list(summary_rate, t)
-        l.append(round(n/elapsed,2))
-        l = get_list(summary_avg, t)
-        l.append(round(avg,6))
+        get_list(summary_rate, t).append(round(n_success/elapsed,2))
+        get_list(summary_avg, t).append(round(avg,6))
     return summary_labels, summary_rate, summary_avg, total_details
 
 
 data = {}
 if __name__ == '__main__':
     name = sys.argv[1]
+    oname = name.rsplit('.',1)[0] + ".html"
+    print(oname)
+
     results = json.load(open(name))
+    of = open(oname, 'w')
 
     summary_labels, summary_rate, summary_avg, total_details = transform_crud_results(results)
 
-    print(HEADER.replace('===TITLE===', name))
-    print(BODY)
-    print(f'var labels =', json.dumps(summary_labels), ';')
-    addSummaryChart('Transactional throughput with parallel requests', summary_rate)
-    addSummaryChart('Average request time with parallel requests', summary_avg)
+    of.write(HEADER.replace('===TITLE===', name))
+    of.write(BODY)
+    of.write('var labels =')
+    of.write(json.dumps(summary_labels))
+    of.write(';')
+    addSummaryChart(of, 'Transactional throughput with parallel requests', summary_rate)
+    addSummaryChart(of, 'Average request time with parallel requests', summary_avg)
     for p, details in total_details.items():
-        addDetailedChart(f"Time for each request - {p} parallel requests", details)
-    print(FOOTER)
+        addDetailedChart(of, f"Time for each request - {p} parallel requests", details)
+    of.write(FOOTER)
