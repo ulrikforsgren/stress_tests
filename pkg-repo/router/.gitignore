@@ -1,0 +1,5 @@
+src/java/src/
+src/ncsc-out/
+src/java/build/
+package-meta-data.xml
+netsim/*.fxs
