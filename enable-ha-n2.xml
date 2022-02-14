@@ -8,6 +8,7 @@
         <port>8090</port>
       </tcp>
     </transport>
+    <rate-limiting>0</rate-limiting>
   </webui>
 
   <netconf-north-bound>

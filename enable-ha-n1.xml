@@ -3,6 +3,7 @@
 
   <webui>
     <enabled>true</enabled>
+    <rate-limiting>0</rate-limiting>
   </webui>
 
   <netconf-north-bound>
