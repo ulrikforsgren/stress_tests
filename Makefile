@@ -97,6 +97,7 @@ ha-single:
 	. venv/bin/activate; ./xmlmerge.py follower/ncs.conf enable-ha-n2.xml > ha-n2-tmp.xml
 	mv ha-n2-tmp.xml follower/ncs.conf
 	cp initial_data/ha-config.xml follower/ncs-cdb/.
+	ln -s ../local-start-java-vm follower/.
 
 .PHONY: ha-on
 ha-on: check-ha
