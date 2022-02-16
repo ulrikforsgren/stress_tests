@@ -43,14 +43,12 @@ So far these increments have come to mind:
 * NETCONF transport support
 * See if it is possible to make stresstesting.py independent of transport:
   E.g. RESTCONF/NETCONF.
-* Run tests with -p open connections in parallel and reusing them to minimize
-  overhead of setting up connections.
 * Run tests with a streaming window of -p parallel connections. As soon as a
   connection is free a new request will be pushed.
-* Control and get HA status using RESTCONF
+  - option to select scheduler batch/window
 * Rule to test connection. Good as a sanity check prior to running a test.
-* Run a transaction sustain test and turning ha on/off during test.
 * Provide credentials to restconf_api.
+* Option to setup connections prior to start measuring
 
 ## Dimensions and Permutations ##
 

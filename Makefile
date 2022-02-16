@@ -79,7 +79,7 @@ LSA-BUILD:
 ha: check-build
 	@if [ ! -e HA ]; then \
 	  if [ -e SINGLE-BUILD ]; then \
-	    $(MAKE) -s ha-single; \
+	    $(MAKE) ha-single; \
 	  fi; \
 	  touch HA; \
 	fi
@@ -90,7 +90,7 @@ ha-single:
 	. venv/bin/activate; ./xmlmerge.py ncs.conf enable-ha-n1.xml > ha-n1-tmp.xml
 	mv ha-n1-tmp.xml ncs.conf
 	cp initial_data/ha-config.xml ncs-cdb/.
-	$(MAKE) -s follower/ncs.conf
+	$(MAKE) follower/ncs.conf
 	ln -sf ../../pkg-repo/model-a follower/packages/.
 	ln -sf ../../pkg-repo/manual-ha follower/packages/.
 	ln -sf ../local-start-java-vm follower/.
@@ -101,9 +101,9 @@ ha-single:
 .PHONY: ha-on
 ha-on: check-ha
 	@if [ -e SINGLE-BUILD ]; then \
-	    $(MAKE) -s ha-on-single; \
+	    $(MAKE) ha-on-single; \
 	fi
-	@$(MAKE) -s ha-status
+	@$(MAKE) ha-status
 
 .PHONY: ha-on-single
 ha-on-single:
@@ -114,9 +114,9 @@ ha-on-single:
 .PHONY: ha-off
 ha-off: check-ha
 	@if [ -e SINGLE-BUILD ]; then \
-	    $(MAKE) -s ha-off-single; \
+	    $(MAKE) ha-off-single; \
 	fi
-	@$(MAKE) -s ha-status
+	@$(MAKE) ha-status
 
 .PHONY: ha-off-single
 ha-off-single:
@@ -126,7 +126,7 @@ ha-off-single:
 .PHONY: ha-status
 ha-status: check-ha
 	@if [ -e SINGLE-BUILD ]; then \
-	    $(MAKE) -s ha-status-single; \
+	    $(MAKE) ha-status-single; \
 	fi
 
 .PHONY: ha-status-single
@@ -183,7 +183,7 @@ upper-nso: build-pkgs
 	for i in $(CFS_PACKAGES); do \
 	  ln -sf ../../pkg-repo/$${i} $@/packages/.; \
 	done
-	$(MAKE) -s $@/packages/rfs-vlan-ned
+	$(MAKE) $@/packages/rfs-vlan-ned
 	ln -s ${NCS_DIR}/packages/lsa/$(LSA_NED) $@/packages/.
 
 upper-nso/packages/rfs-vlan-ned:
@@ -226,18 +226,18 @@ clean:
 .PHONY: start
 start: check-build
 	@if [ -e SINGLE-BUILD ]; then \
-	  $(MAKE) -s start-single; \
+	  $(MAKE) start-single; \
 	fi
 	@if [ -e LSA-BUILD ]; then \
-	  $(MAKE) -s start-lsa; \
+	  $(MAKE) start-lsa; \
 	fi
 
 .PHONY: start-single
 start-single:
 	@if [ ! -e HA ]; then \
-	  $(MAKE) -s start-single-noha; \
+	  $(MAKE) start-single-noha; \
 	else \
-	  $(MAKE) -s start-single-ha; \
+	  $(MAKE) start-single-ha; \
 	fi
 
 .PHONY: start-single-noha
@@ -278,18 +278,18 @@ stop-fwserver:
 .PHONY: stop
 stop: check-build
 	@if [ -e SINGLE-BUILD ]; then \
-	  $(MAKE) -s stop-single; \
+	  $(MAKE) stop-single; \
 	fi
 	@if [ -e LSA-BUILD ]; then \
-	  $(MAKE) -s stop-lsa; \
+	  $(MAKE) stop-lsa; \
 	fi
 
 .PHONY: stop-single
 stop-single:
 	@if [ ! -e HA ]; then \
-	  $(MAKE) -s stop-single-noha; \
+	  $(MAKE) stop-single-noha; \
 	else \
-	  $(MAKE) -s stop-single-ha; \
+	  $(MAKE) stop-single-ha; \
 	fi
 
 .PHONY: stop-single-noha
@@ -318,9 +318,11 @@ reset:
 # CLI
 #
 
-.PHONY: cli cli-upper-nso cli-lower-nso-1 cli-lower-nso-2
+.PHONY: cli cli-ha cli-upper-nso cli-lower-nso-1 cli-lower-nso-2
 cli:
 	ncs_cli -u admin
+cli-ha:
+	NCS_IPC_PORT=4579 ncs_cli -C -u admin
 cli-upper-nso: cli
 cli-lower-nso-1:
 	NCS_IPC_PORT=4570 ncs_cli -C -u admin

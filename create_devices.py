@@ -1,3 +1,6 @@
+#!/usr/bin/env python3
+# -*- mode: python; python-indent: 4 -*-
+
 #
 # Base to start scripting with NSO
 #
@@ -23,7 +26,7 @@ while do_create_devices:
             device = r.devices.device
             ce = device.create(f'ce{n}')
             ce.address = 'localhost'
-            ce.port = 10000+n
+            ce.port = 30000+n
             ce.device_type.netconf.ned_id = "router-nc-1.0"
             ce.authgroup = "default"
             ce.state.admin_state = "unlocked"

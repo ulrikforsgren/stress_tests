@@ -148,7 +148,7 @@ async def stress_requests_batch(n, n_p, setup, teardown, task, args):
 # n_p connections are setup and new requests and sent as a connection
 # becomes available.
 #
-async def stress_requests_stream(n, n_p, setup, teardown, task, args):
+async def stress_requests_window(n, n_p, setup, teardown, task, args):
     results = []
     tasks = set()
 
