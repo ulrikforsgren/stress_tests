@@ -91,9 +91,9 @@ ha-single:
 	mv ha-n1-tmp.xml ncs.conf
 	cp initial_data/ha-config.xml ncs-cdb/.
 	$(MAKE) follower/ncs.conf
-	ln -sf ../../pkg-repo/model-a follower/packages/.
-	ln -sf ../../pkg-repo/manual-ha follower/packages/.
-	ln -sf ../local-start-java-vm follower/.
+	for i in $(SINGLE_PACKAGES); do \
+	  ln -sf ../../pkg-repo/$${i} follower/packages/.; \
+	done
 	. venv/bin/activate; ./xmlmerge.py follower/ncs.conf enable-ha-n2.xml > ha-n2-tmp.xml
 	mv ha-n2-tmp.xml follower/ncs.conf
 	cp initial_data/ha-config.xml follower/ncs-cdb/.
