@@ -88,7 +88,7 @@ async def request_task(q):
                     }}''',
             'parameters': parameters
     }
-    args['host'] = 'localhost:8080'
+    args['host'] = sys.argv[1]
 
     # Just run for a very long time...
     await stress_requests_stream(1000000, 10, setup, teardown,
@@ -100,9 +100,12 @@ def request_thread(q):
 x = []
 y = []
 
+yaxis = 100
+if len(sys.argv)>2:
+    yaxis = int(sys.argv[2])
 figure, ax = plt.subplots(figsize=(4,3))
 line, = ax.plot(x, y)
-plt.axis([0, 300, 0, 100])
+plt.axis([0, 300, 0, yaxis])
 
 n = 0
 t_prev = time.monotonic()

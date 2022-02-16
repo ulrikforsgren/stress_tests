@@ -77,6 +77,8 @@ async def stress_requests_stream(n, n_p, setup, teardown, task, args):
 
 
 async def request_task(q):
+    leader = sys.argv[1]
+    follower = sys.argv[2]
     parameters = Parameters({
         "id": SequenceRequest(0, wrap=100),
         "data": RandomValue(0, 4000000000),
@@ -91,13 +93,13 @@ async def request_task(q):
                     }}''',
             'parameters': parameters
     }
-    args['host'] = 'localhost:8080'
+    args['host'] = leader
 
     # Turn off HA
-    print(await set_ha_state('localhost:8090'))
-    print(await set_ha_state('localhost:8080'))
-    print(await get_ha_status('localhost:8080'))
-    print(await get_ha_status('localhost:8090'))
+    print(await set_ha_state(follower))
+    print(await set_ha_state(leader))
+    print(await get_ha_status(leader))
+    print(await get_ha_status(follower))
 
     start = time.monotonic()
     print(await stress_requests_stream(10000, 10, setup, teardown,
@@ -105,12 +107,12 @@ async def request_task(q):
     elapsed_without_ha = time.monotonic()-start
 
     await asyncio.sleep(4)
-    print(await set_ha_state('localhost:8080', 'master'))
+    print(await set_ha_state(leader, 'master'))
     await asyncio.sleep(1)
-    print(await set_ha_state('localhost:8090', 'slave'))
+    print(await set_ha_state(follower, 'slave'))
     await asyncio.sleep(5)
-    print(await get_ha_status('localhost:8080'))
-    print(await get_ha_status('localhost:8090'))
+    print(await get_ha_status(leader))
+    print(await get_ha_status(follower))
 
     start = time.monotonic()
     await stress_requests_stream(10000, 10, setup, teardown, default_task, args)
