@@ -86,7 +86,7 @@ HEADER = """
 """
 
 BODY = """
-    <div id="charts">
+    <div id="charts" style="margin: 50px">
     </div>
     <script>
 """
