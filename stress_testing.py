@@ -110,12 +110,33 @@ class Parameters(dict):
                 v.update_batch()
 
 
+def number_of_open_connections(conn):
+    if len(conn._conns):
+        key = list(conn._conns.keys())[0] # Assuming only one key
+        return len(conn._conns[key])
+    else:
+        return 0
+
+# TODO: Use connect on TCPConnector instead?
+# TODO: or use _create_connection and add to pool to avoid raise conditions?
+async def setup_connections(n_p, client, host):
+    tasks = [ asyncio.create_task(setup_task(client, host))
+              for p in range(0,n_p) ]
+    await asyncio.gather(*tasks)
+    #await asyncio.wait(tasks)
 #
 # n_p connections are setup and reused for the whole test.
 #
 async def stress_requests(n, n_p, setup, teardown, task, args):
     results = []
     await setup(args)
+    conn = args['client']._connector
+    nc = 0
+    # NOTE: This is a brute force method of setting up the connections...
+    while nc<n_p:
+        await setup_connections(n_p, args['client'], args['host'])
+        nc = number_of_open_connections(conn)
+    st = time.monotonic()
     while n>0: # Execute requests in batches of n_p in parellel.
         if n<n_p: n_p = n
         tasks = [ asyncio.create_task(task(**args))
@@ -185,6 +206,17 @@ async def single_request(args, setup=setup, teardown=teardown):
     # Cleanup connection pool
     await teardown(args)
     return result
+
+async def setup_task(client, host):
+    url = '/tailf-ncs:devices/global-settings/read-timeout'
+    op = 'read'
+    st = time.monotonic()
+    resp = await restconf_request(client,
+                                  host,
+                                  op,
+                                  url)
+    elapsed = time.monotonic()-st
+    return (*resp, elapsed)
 
 async def default_task(client=None, parameters=Parameters(), host='', op='',
                        url='', data='', resource_type='data'):
