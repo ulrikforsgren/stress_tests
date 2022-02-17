@@ -117,8 +117,6 @@ def number_of_open_connections(conn):
     else:
         return 0
 
-# TODO: Use connect on TCPConnector instead?
-# TODO: or use _create_connection and add to pool to avoid raise conditions?
 async def setup_connections(n_p, client, host):
     tasks = [ asyncio.create_task(setup_task(client, host))
               for p in range(0,n_p) ]
@@ -131,11 +129,15 @@ async def stress_requests(n, n_p, setup, teardown, task, args):
     results = []
     await setup(args)
     conn = args['client']._connector
-    nc = 0
-    # NOTE: This is a brute force method of setting up the connections...
-    while nc<n_p:
-        await setup_connections(n_p, args['client'], args['host'])
-        nc = number_of_open_connections(conn)
+    await conn.setup_pool_connections(conn, args['host'], n_p)
+    #nc = number_of_open_connections(conn)
+    ## NOTE: This is a brute force method of setting up the connections...
+    #print(number_of_open_connections(conn))
+    #while nc<n_p:
+    #    print("XXXXXXXXXXXXXXXXXXXXX", n_p - nc)
+    #    await setup_connections(n_p, args['client'], args['host'])
+    #    nc = number_of_open_connections(conn)
+    #print(number_of_open_connections(conn))
     st = time.monotonic()
     while n>0: # Execute requests in batches of n_p in parellel.
         if n<n_p: n_p = n
@@ -253,7 +255,7 @@ def assert_ok(results):
             assertion = False
         else:
             raise Exception(f"Invalid return result {rid}: {res}")
-    assert(assertion)
+    assert assertion
 
 
 # Calculate the average execution time for all "ok" requests and

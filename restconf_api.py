@@ -2,7 +2,7 @@
 
 from base64 import b64encode
 import aiohttp
-
+from yarl import URL
 
 HEADERS_JSON={
     'Accept':'application/yang-data+json',
@@ -21,8 +21,22 @@ REQ_DISPATCH = {
     'action': ('POST', 204)
 }
 
+# This method is an extension of TCPConnector to setup an number of connections
+# prior to doing requests
+async def setup_pool_connections(self, conn, host, n_p):
+    req = aiohttp.ClientRequest('GET', URL(f'http://{host}'))
+    timeout = aiohttp.ClientTimeout(total=5 * 60)
+    key = req.connection_key
+    assert self._get(key) is None, "No connections should be setup at this time."
+    connections = []
+    for _ in range(0, n_p):
+        proto = await self._create_connection(req, [], timeout)
+        connections.append((proto, self._loop.time()))
+    conn._conns[key] = connections
+
 
 async def setup(args):
+    aiohttp.TCPConnector.setup_pool_connections = setup_pool_connections
     conn = aiohttp.TCPConnector(limit=0) # No limit of parallel connections
     client = aiohttp.ClientSession(connector=conn)
     args['client'] = client
