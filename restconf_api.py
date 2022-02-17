@@ -41,8 +41,10 @@ async def restconf_request(client, host, op, resource, data=None,
     method, expected_status = REQ_DISPATCH[op]
     url = f'http://{host}/restconf/{resource_type}{resource}'
     try:
+        if data is not None:
+              data=data.encode('utf-8')
         async with client.request(method, url, headers=HEADERS_JSON,
-                                  data=data.encode('utf-8'),
+                                  data=data,
                                   params=params) as response:
             if response.status in [ 201, 204 ]:
                 data = None # No content is expected.
