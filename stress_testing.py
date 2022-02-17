@@ -124,8 +124,9 @@ async def stress_requests(n, n_p, setup, teardown, task, args):
         if 'parameters' in args:
             args['parameters'].update_batch()
         n -= n_p
+    elapsed = time.monotonic()-st
     await teardown(args)
-    return results
+    return elapsed, results
 
 #
 # n_p connections are setup for each batch then closed
@@ -135,6 +136,7 @@ async def stress_requests_batch(n, n_p, setup, teardown, task, args):
     while n>0: # Execute requests in batches of n_p in parellel.
         if n<n_p: n_p = n
         await setup(args)
+        st = time.monotonic()
         tasks = [ asyncio.create_task(task(**args))
                   for p in range(0,n_p)]
         results += await asyncio.gather(*tasks)
@@ -142,7 +144,8 @@ async def stress_requests_batch(n, n_p, setup, teardown, task, args):
         if 'parameters' in args:
             args['parameters'].update_batch()
         n -= n_p
-    return results
+    elapsed = time.monotonic()-st
+    return elapsed, results
 
 #
 # n_p connections are setup and new requests and sent as a connection
@@ -153,6 +156,7 @@ async def stress_requests_window(n, n_p, setup, teardown, task, args):
     tasks = set()
 
     await setup(args)
+    st = time.monotonic()
 
     for _ in range(0, min(n, n_p)):
         tasks.add(asyncio.create_task(task(**args)))
@@ -170,6 +174,7 @@ async def stress_requests_window(n, n_p, setup, teardown, task, args):
         n -= tasks_to_start
         tasks = pending
 
+    elapsed = time.monotonic()-st
     await teardown(args)
     return results
 
@@ -242,9 +247,7 @@ def calc_average(results):
 
 def do_test(args, n, n_p, req, task=None):
     task = task or default_task
-    st = time.monotonic()
-    results = asyncio.run(stress_requests(n, n_p, setup, teardown, task, req))
-    elapsed = time.monotonic()-st
+    elapsed, results = asyncio.run(stress_requests(n, n_p, setup, teardown, task, req))
 
     if args.v:
         pprint(results)
