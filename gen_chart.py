@@ -150,7 +150,10 @@ def transform_crud_results(results):
 data = {}
 if __name__ == '__main__':
     name = sys.argv[1]
-    oname = name.rsplit('.',1)[0] + ".html"
+    if len(sys.argv)>2:
+        oname = sys.argv[2]+'/'+name.rsplit('.',1)[0] + ".html"
+    else:
+        oname = name.rsplit('.',1)[0] + ".html"
     print(oname)
 
     results = json.load(open(name))
