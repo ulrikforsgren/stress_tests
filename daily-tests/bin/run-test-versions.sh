@@ -1,3 +1,3 @@
 #!/bin/bash
 
-~/daily-tests/run-test-version.sh 5.7
+~/daily-tests/bin/run-test-version.sh 5.7 build

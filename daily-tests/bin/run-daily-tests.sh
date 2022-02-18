@@ -7,4 +7,4 @@ export DAILYDIR=~/daily-tests/$DATE
 mkdir -p $DAILYDIR
 cd $DAILYDIR
 
-~/daily-tests/run-test-versions.sh
+~/daily-tests/bin/run-test-versions.sh
