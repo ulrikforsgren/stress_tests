@@ -1,0 +1,28 @@
+module template-service {
+  namespace "http://com/example/templateservice";
+  prefix template-service;
+
+  import ietf-inet-types {
+    prefix inet;
+  }
+  import tailf-ncs {
+    prefix ncs;
+  }
+
+  container template-service {
+    list service {
+      key name;
+
+      uses ncs:service-data;
+      ncs:servicepoint "template-service";
+
+      leaf name {
+        type string;
+      }
+
+      leaf str-value {
+        type string;
+      }
+    }
+  }
+}

@@ -12,8 +12,7 @@ class ServiceCallbacks(Service):
     # must always exist.
     @Service.create
     def cb_create(self, tctx, root, service, proplist):
-        self.log.info('Service create(service=', service._path, ')')
-        time.sleep(0.1)
+        pass
 
 
 
@@ -29,7 +28,7 @@ class Main(ncs.application.Application):
         # Service callbacks require a registration for a 'service point',
         # as specified in the corresponding data model.
         #
-        self.register_service('python-service-servicepoint', ServiceCallbacks)
+        self.register_service('empty-python-service-servicepoint', ServiceCallbacks)
 
         # If we registered any callback(s) above, the Application class
         # took care of creating a daemon (related to the service/action point).

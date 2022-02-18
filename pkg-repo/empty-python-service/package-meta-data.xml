@@ -1,7 +1,7 @@
 <ncs-package xmlns="http://tail-f.com/ns/ncs-packages">
-  <name>python-service</name>
+  <name>empty-python-service</name>
   <package-version>1.0</package-version>
-  <description>Parameterized Python service</description>
+  <description>Python service with an empty create method</description>
   <ncs-min-version>5.2</ncs-min-version>
 
   <component>

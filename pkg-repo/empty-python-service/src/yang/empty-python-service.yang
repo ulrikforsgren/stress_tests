@@ -1,7 +1,7 @@
-module python-service {
+module empty-python-service {
 
-  namespace "http://example.com/python-service";
-  prefix python-service;
+  namespace "http://example.com/empty-python-service";
+  prefix empty-python-service;
 
   import ietf-inet-types {
     prefix inet;
@@ -14,14 +14,14 @@ module python-service {
   }
 
   description
-    "Parameterized Python based service";
+    "Python service with an empty create method";
 
   revision 2016-01-01 {
     description
       "Initial revision.";
   }
 
-  container python-service {
+  container empty-python-service {
     list service {
       key name;
       leaf name {
@@ -31,7 +31,7 @@ module python-service {
       }
 
       uses ncs:service-data;
-      ncs:servicepoint python-service-servicepoint;
+      ncs:servicepoint empty-python-service-servicepoint;
 
       leaf str-value {
         type string;

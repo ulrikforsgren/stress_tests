@@ -1,0 +1,13 @@
+<ncs-package xmlns="http://tail-f.com/ns/ncs-packages">
+  <name>java-service</name>
+  <package-version>1.0</package-version>
+  <description>Parameterized Java based service</description>
+  <ncs-min-version>5.2</ncs-min-version>
+
+  <component>
+    <name>RFSSkeleton</name>
+    <callback>
+      <java-class-name>com.example.javaservice.javaserviceRFS</java-class-name>
+    </callback>
+  </component>
+</ncs-package>

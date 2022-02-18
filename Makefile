@@ -1,6 +1,15 @@
 # The order of packages is significant as there are dependencies between
 # the packages. Typically generated namespaces are used by other packages.
-SINGLE_PACKAGES =  model-a manual-ha empty-service python-service router
+SINGLE_PACKAGES = \
+    model-a\
+    manual-ha\
+    empty-template-service\
+    empty-python-service\
+    empty-java-service\
+    template-service\
+    python-service\
+    java-service\
+    router
 
 ifeq "$(NCS_DIR)" ""
 $(error NCS_DIR is not setup. Source ncsrc to setup NSO environment before proceeding)

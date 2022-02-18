@@ -1,7 +1,6 @@
-module python-service {
-
-  namespace "http://example.com/python-service";
-  prefix python-service;
+module java-service {
+  namespace "http://com/example/javaservice";
+  prefix java-service;
 
   import ietf-inet-types {
     prefix inet;
@@ -13,16 +12,10 @@ module python-service {
     prefix ncs;
   }
 
-  description
-    "Parameterized Python based service";
-
-  revision 2016-01-01 {
-    description
-      "Initial revision.";
-  }
-
-  container python-service {
+  container java-service {
     list service {
+      description "Parameterized Java based service";
+
       key name;
       leaf name {
         tailf:info "Unique service id";
@@ -31,7 +24,7 @@ module python-service {
       }
 
       uses ncs:service-data;
-      ncs:servicepoint python-service-servicepoint;
+      ncs:servicepoint java-service-servicepoint;
 
       leaf str-value {
         type string;

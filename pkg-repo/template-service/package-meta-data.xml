@@ -1,0 +1,6 @@
+<ncs-package xmlns="http://tail-f.com/ns/ncs-packages">
+  <name>template-service</name>
+  <package-version>1.0</package-version>
+  <description>Template-based service</description>
+  <ncs-min-version>5.2</ncs-min-version>
+</ncs-package>

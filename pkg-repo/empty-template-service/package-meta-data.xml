@@ -1,0 +1,6 @@
+<ncs-package xmlns="http://tail-f.com/ns/ncs-packages">
+  <name>empty-template-service</name>
+  <package-version>1.0</package-version>
+  <description>This is a template service with one template creates no config</description>
+  <ncs-min-version>5.2</ncs-min-version>
+</ncs-package>
