@@ -179,8 +179,10 @@ async def stress_requests_window(n, n_p, setup, teardown, task, args):
     tasks = set()
 
     await setup(args)
-    st = time.monotonic()
+    conn = args['client']._connector
+    await conn.setup_pool_connections(conn, args['host'], n_p)
 
+    st = time.monotonic()
     for _ in range(0, min(n, n_p)):
         tasks.add(asyncio.create_task(task(**args)))
     n -= min(n, n_p) # Started initial tasks
@@ -199,7 +201,7 @@ async def stress_requests_window(n, n_p, setup, teardown, task, args):
 
     elapsed = time.monotonic()-st
     await teardown(args)
-    return results
+    return elapsed, results
 
 async def single_request(args, setup=setup, teardown=teardown):
     # Setup connection pool
@@ -281,7 +283,7 @@ def calc_average(results):
 
 def do_test(args, n, n_p, req, task=None):
     task = task or default_task
-    elapsed, results = asyncio.run(stress_requests(n, n_p, setup, teardown, task, req))
+    elapsed, results = asyncio.run(stress_requests_window(n, n_p, setup, teardown, task, req))
 
     if args.v:
         pprint(results)
