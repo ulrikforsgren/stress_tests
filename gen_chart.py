@@ -13,6 +13,7 @@ TODO:
 """
 
 import json
+import os.path as path
 import sys
 
 HEADER = """
@@ -151,7 +152,7 @@ data = {}
 if __name__ == '__main__':
     name = sys.argv[1]
     if len(sys.argv)>2:
-        oname = sys.argv[2]+'/'+name.rsplit('.',1)[0] + ".html"
+        oname = sys.argv[2]+'/'+path.basename(name).rsplit('.',1)[0] + ".html"
     else:
         oname = name.rsplit('.',1)[0] + ".html"
     print(oname)
