@@ -12,7 +12,7 @@ if [ "$2" == "" ]; then
   exit 1
 fi
 
-export DIR=$1
+export DIR=$2
 export HOST=`hostname`
 
 #
