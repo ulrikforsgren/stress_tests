@@ -17,7 +17,7 @@ export HOST=`hostname`
 
 ./model_a_tests.py --host `echo $NODE | cut -f1 -d:`:8088 crud -n 1000 --json results/model-a-crud-1000-fwslocal.json
 
-./model_a_tests.py --host $NODE crud -n 1000 --json results/model-a-crud-10-local.json
+./model_a_tests.py --host $NODE crud -n 1000 --json results/model-a-crud-1000-local.json
 ./model_a_tests.py --host $NODE clean
 
 #

@@ -30,16 +30,16 @@
     </ssh>
   </cli>
 
-  <ncs-ipc-address action="replace">
+  <ncs-ipc-address operation="replace">
     <ip>127.0.0.1</ip>
     <port>4579</port>
   </ncs-ipc-address>
 
-  <ha action="replace">
+  <ha operation="replace">
     <enabled>true</enabled>
   </ha>
 
-  <java-vm action="replace">
+  <java-vm operation="replace">
     <start-command>./local-start-java-vm</start-command>
   </java-vm>
 
