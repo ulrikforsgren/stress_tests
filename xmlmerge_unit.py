@@ -7,7 +7,7 @@ from xmlmerge import merge_tree, MergeError
 from lxml import etree
 
 # TODO:
-#  - Verify that action and key are removed from output...
+#  - Verify that operation and key are removed from output...
 #    e.g. copy a subtree
 #  - Test for different type of elements: text only vs. contains subelements.
 
@@ -313,7 +313,7 @@ class ReplaceTestCase(MergeXMLTestCase):
 """
         r = """\
 <config>
-  <b  action="replace">Ahh</b>
+  <b  operation="replace">Ahh</b>
 </config>
 """
         with self.assertRaises(MergeError) as e:
@@ -327,12 +327,12 @@ class ReplaceTestCase(MergeXMLTestCase):
 """
         r = """\
 <config>
-  <b  action="replace">Bee</b>
+  <b  operation="replace">Bee</b>
 </config>
 """
         with self.assertRaises(MergeError) as e:
             xml = self.merge_xml(l, r)
-        self.assertEqual(e.exception.args, ('Action replace can not be used '
+        self.assertEqual(e.exception.args, ('Operation replace can not be used '
                                             'with text only elements.',))
 
    def test_text_key(self):
@@ -342,7 +342,7 @@ class ReplaceTestCase(MergeXMLTestCase):
 """
         r = """\
 <config>
-  <b  action="replace" key="*">Bee</b>
+  <b  operation="replace" key="*">Bee</b>
 </config>
 """
         with self.assertRaises(MergeError) as e:
@@ -357,7 +357,7 @@ class ReplaceTestCase(MergeXMLTestCase):
 """
         r = """\
 <config>
-  <a action="replace" key="name">
+  <a operation="replace" key="name">
     <name>Kilroy</name>
     <age>42</age>
   </a>
@@ -381,7 +381,7 @@ class ReplaceTestCase(MergeXMLTestCase):
 """
         r = """\
 <config>
-  <a action="replace" key="name">
+  <a operation="replace" key="name">
     <name>Kilroy</name>
     <age>42</age>
   </a>
@@ -417,7 +417,7 @@ class ReplaceTestCase(MergeXMLTestCase):
 """
         r = """\
 <config>
-  <a action="replace" key="name">
+  <a operation="replace" key="name">
     <name>Kilroy</name>
     <age>42</age>
   </a>
@@ -456,7 +456,7 @@ class ReplaceTestCase(MergeXMLTestCase):
 """
         r = """\
 <config>
-  <a action="replace" key="name">
+  <a operation="replace" key="name">
     <name>Kilroy</name>
     <age>42</age>
   </a>
@@ -493,7 +493,7 @@ class ReplaceTestCase(MergeXMLTestCase):
 """
         r = """\
 <config>
-  <a action="replace" key="*">
+  <a operation="replace" key="*">
     <age>42</age>
   </a>
 </config>
@@ -522,9 +522,9 @@ class AddTestCase(MergeXMLTestCase):
 """
         r = """\
 <config>
-  <b  action="add">Ahh</b>
-  <b  action="add">Ahh</b>
-  <b  action="add">Bee</b>
+  <b  operation="add">Ahh</b>
+  <b  operation="add">Ahh</b>
+  <b  operation="add">Bee</b>
 </config>
 """
         o = """\
@@ -543,9 +543,9 @@ class AddTestCase(MergeXMLTestCase):
 """
         r = """\
 <config>
-  <b  action="add">Ahh</b>
-  <b  action="add">Bee</b>
-  <b  action="add">Cee</b>
+  <b  operation="add">Ahh</b>
+  <b  operation="add">Bee</b>
+  <b  operation="add">Cee</b>
 </config>
 """
         o = """\
@@ -567,13 +567,13 @@ class AddTestCase(MergeXMLTestCase):
 """
         r = """\
 <config>
-  <b  action="add" key="*">Bee</b>
+  <b  operation="add" key="*">Bee</b>
 </config>
 """
         with self.assertRaises(MergeError) as e:
             xml = self.merge_xml(l, r)
         self.assertEqual(e.exception.args, ('Attribute key can not be used '
-                                            'with action add.',))
+                                            'with operation add.',))
 
    def test_key(self):
         l = """\
@@ -585,7 +585,7 @@ class AddTestCase(MergeXMLTestCase):
 """
         r = """\
 <config>
-  <a action="add" key="name">
+  <a operation="add" key="name">
     <name>Kilroy</name>
     <age>42</age>
   </a>
@@ -594,7 +594,7 @@ class AddTestCase(MergeXMLTestCase):
         with self.assertRaises(MergeError) as e:
             xml = self.merge_xml(l, r)
         self.assertEqual(e.exception.args, ('Attribute key can not be used '
-                                            'with action add',))
+                                            'with operation add',))
 
 
 
@@ -607,8 +607,8 @@ class DeleteTestCase(MergeXMLTestCase):
 """
         r = """\
 <config>
-  <b  action="delete">Ahh</b>
-  <b  action="delete">Bee</b>
+  <b  operation="delete">Ahh</b>
+  <b  operation="delete">Bee</b>
 </config>
 """
         o = """\
@@ -627,8 +627,8 @@ class DeleteTestCase(MergeXMLTestCase):
 """
         r = """\
 <config>
-  <b  action="delete">Bee</b>
-  <b  action="delete">Cee</b>
+  <b  operation="delete">Bee</b>
+  <b  operation="delete">Cee</b>
 </config>
 """
         o = """\
@@ -648,7 +648,7 @@ class DeleteTestCase(MergeXMLTestCase):
 """
         r = """\
 <config>
-  <b  action="delete"/>
+  <b  operation="delete"/>
 </config>
 """
         o = """\
@@ -664,7 +664,7 @@ class DeleteTestCase(MergeXMLTestCase):
 """
         r = """\
 <config>
-  <b  action="delete" key="*">Bee</b>
+  <b  operation="delete" key="*">Bee</b>
 </config>
 """
         with self.assertRaises(MergeError) as e:
@@ -687,7 +687,7 @@ class DeleteTestCase(MergeXMLTestCase):
 """
         r = """\
 <config>
-  <a action="delete" key="name">
+  <a operation="delete" key="name">
     <name>Kilroy</name>
   </a>
 </config>
@@ -718,7 +718,7 @@ class DeleteTestCase(MergeXMLTestCase):
 """
         r = """\
 <config>
-  <a action="delete" key="name">
+  <a operation="delete" key="name">
     <name>Kilroy</name>
   </a>
 </config>
@@ -749,7 +749,7 @@ class DeleteTestCase(MergeXMLTestCase):
 """
         r = """\
 <config>
-  <a action="delete" key="*">
+  <a operation="delete" key="*">
     <name>Kilroy</name>
   </a>
 </config>

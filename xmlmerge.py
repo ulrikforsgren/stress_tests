@@ -6,7 +6,7 @@ import sys
 from  lxml import etree as ET
 
 """
-Actions:
+Operations:
  - merge (default)
  - add
  - replace
@@ -37,8 +37,8 @@ def no_subelements(e):
 
 def cleanup_attributes(node):
     for c in node:
-        if 'action' in c.attrib:
-            del c.attrib['action']
+        if 'operation' in c.attrib:
+            del c.attrib['operation']
         if 'key' in c.attrib:
             del c.attrib['key']
         if has_subelements(c):
@@ -46,10 +46,10 @@ def cleanup_attributes(node):
 
 def merge_tree(lnode, rnode):
     for c in rnode:
-        action = 'merge' # default
-        if 'action' in c.attrib:
-            action = c.attrib.get('action')
-            del c.attrib['action']
+        operation = 'merge' # default
+        if 'operation' in c.attrib:
+            operation = c.attrib.get('operation')
+            del c.attrib['operation']
 
         keyname = key = None 
         if 'key' in c.attrib:
@@ -60,18 +60,18 @@ def merge_tree(lnode, rnode):
                     key = v.text.strip()
             del c.attrib['key'], v
             if no_subelements(c):
-                if action == 'add':
+                if operation == 'add':
                     raise MergeError('Attribute key can not be used with '
-                                     'action add.')
+                                     'operation add.')
                 else:
                     raise MergeError('Attribute key can not be used with '
                                      'text only elements.')
 
         lcs = lnode.findall(c.tag)
 
-        if action == 'add':
+        if operation == 'add':
             if keyname is not None:
-                raise MergeError('Attribute key can not be used with action '
+                raise MergeError('Attribute key can not be used with operation '
                                  'add')
             if not lcs:
                 lnode.append(c)
@@ -81,16 +81,16 @@ def merge_tree(lnode, rnode):
 
         elif not lcs: # ========= No elements in ltress ==========
 
-            if action == 'merge':
+            if operation == 'merge':
                 fix_indentation(lnode, rnode)
                 lnode.append(deepcopy(c))
-            elif action == 'replace':
+            elif operation == 'replace':
                 if no_subelements(c):
-                    raise MergeError('Action replace can not be used '
+                    raise MergeError('Operation replace can not be used '
                                      'with text only elements.')
                 fix_indentation(lnode, rnode)
                 lnode.append(deepcopy(c))
-            elif action == 'merge':
+            elif operation == 'merge':
                 fix_indentation(lnode, rnode)
                 lnode.append(deepcopy(c))
             else: # delete
@@ -98,7 +98,7 @@ def merge_tree(lnode, rnode):
 
         else:          # ========== one or more elements ==========
 
-            if action == 'merge':
+            if operation == 'merge':
                 if no_subelements(c):
                     pos = lnode.index(lcs[0])
                     for lc in lcs:
@@ -124,9 +124,9 @@ def merge_tree(lnode, rnode):
                         for lc in lcs:
                             merge_tree(lc, deepcopy(c))
 
-            elif action == 'replace':
+            elif operation == 'replace':
                 if no_subelements(c):
-                    raise MergeError('Action replace can not be used '
+                    raise MergeError('Operation replace can not be used '
                                      'with text only elements.')
                 else:
                     if keyname is not None:
@@ -147,14 +147,14 @@ def merge_tree(lnode, rnode):
                         for lc in lcs:
                             merge_tree(lc, deepcopy(c))
 
-            elif action == 'delete':
+            elif operation == 'delete':
                 if no_subelements(c):
                     for lc in lcs:
                         if c.text is None or c.text.strip() == lc.text.strip():
                             lnode.remove(lc)
                 else:
                     if keyname is None:
-                        raise MergeError('No key specified for action delete.')
+                        raise MergeError('No key specified for operation delete.')
                     for lc in lcs:
                         if keyname == '*':
                             lnode.remove(lc)
