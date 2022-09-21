@@ -11,7 +11,7 @@ routes = web.RouteTableDef()
 
 @routes.get('/restconf/data/{model}/{name}')
 async def get_handler(request):
-    return web.Response(status=200)
+    return web.json_response(data={'status': 'ok'}, status=200)
 
 @routes.post('/restconf/data/{model}')
 async def post_handler(request):
