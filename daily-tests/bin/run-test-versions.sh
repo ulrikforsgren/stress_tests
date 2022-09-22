@@ -12,5 +12,5 @@ VERSIONS="
 for VER in $VERSIONS; do
   (mkdir $VER; cd $VER; ~/daily-tests/bin/run-test-version.sh $VER build | tee run-test-version.log)
   pkill -f ncs.smp
-  pkill -f framework_server.py
+  pkill -f reference_server.py
 done

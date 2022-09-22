@@ -37,9 +37,9 @@ make venv || exit
 
 make single || exit
 
-make start start-fwserver
+make start start-refserver
 
-sleep 3 # Wait for framework_server.py to start
+sleep 3 # Wait for reference_server.py to start
 
 ./run-stress-tests.sh localhost:8080 results
 
@@ -50,6 +50,4 @@ make stop stop-fwserver
 #
 
 mkdir -p ~/public_html/daily-tests/$DATE/$NSO_VERSION
-for f in results/*.json;do
-    ./gen_chart.py $f ~/public_html/daily-tests/$DATE/$NSO_VERSION
-done
+./gen_chart.py -d ~/public_html/daily-tests/$DATE/$NSO_VERSION results/*.json
