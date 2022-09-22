@@ -353,6 +353,7 @@ def run_crud_tests(args, tests, n, max_p, task=None, do_print=False):
     else:
         n_ps = [ int(s) for s in args.s.split(',')]
 
+    print()
     results = []
     for n_p in n_ps:
         for op in ['create', 'read', 'update', 'delete']:
@@ -376,6 +377,7 @@ def run_single_test(args, tests, task=None):
     else:
         average = -1
 
+    print()
     print("Total time:         ", elapsed)
     print("Count OK:           ", count)
     print("Per second:         ", count/elapsed)
