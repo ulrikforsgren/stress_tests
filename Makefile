@@ -274,14 +274,14 @@ start-lsa:
 	cd lower-nso-2; NCS_IPC_PORT=4571 sname=lower-nso-2 ncs -c ncs.conf
 	initial_data/startup-lsa.sh
 
-.PHONY: start-fwserver
-start-fwserver:
-	./framework_server.py 2>/dev/null&
+.PHONY: start-refserver
+start-refserver:
+	./reference_tests/reference_server.py 2>/dev/null&
 	echo "It is now started in the background."
 
-.PHONY: stop-fwserver
-stop-fwserver:
-	pkill -f framework_server.py
+.PHONY: stop-refserver
+stop-refserver:
+	pkill -f reference_server.py
 
 .PHONY: stop
 stop: check-build
