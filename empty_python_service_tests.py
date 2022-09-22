@@ -15,6 +15,7 @@ from stress_testing import parseArgs, Parameters, SequenceRequest,\
 parameters = Parameters({
     "id": SequenceRequest(0),
     "data": RandomValue(0, 4000000000),
+    "delay": 1000
 })
 
 
@@ -31,6 +32,7 @@ CRUD_TESTS = {
             'data': '''{{
                         "service":{{
                             "name":"K{id}",
+                            "delay":{delay},
                             "str-value":"String data {id}"
                         }}
                     }}''',
@@ -48,6 +50,7 @@ CRUD_TESTS = {
             'url': '/empty-python-service:empty-python-service/empty-python-service:service=K{id}',
             'data': '''{{
                         "service":{{
+                            "delay":{delay},
                             "str-value":"Changed string data {data}"
                         }}
                     }}''',

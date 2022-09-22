@@ -26,6 +26,11 @@ module java-service {
       uses ncs:service-data;
       ncs:servicepoint java-service-servicepoint;
 
+      leaf delay {
+        type uint16;
+        default 0;
+      }
+
       leaf str-value {
         type string;
       }

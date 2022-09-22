@@ -12,7 +12,8 @@ class ServiceCallbacks(Service):
     # must always exist.
     @Service.create
     def cb_create(self, tctx, root, service, proplist):
-        pass
+        self.log.info('Service create(service=', service._path, ')')
+        time.sleep(service.delay/1000)
 
 
 

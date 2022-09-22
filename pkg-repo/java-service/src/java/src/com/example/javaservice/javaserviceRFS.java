@@ -53,7 +53,8 @@ public class javaserviceRFS {
 //        TemplateVariables myVars = new TemplateVariables();
 
         try {
-            Thread.sleep(100);
+            long delay = ((ConfUInt16)((NavuLeaf)((NavuContainer)service).get("delay")).value()).longValue();
+            Thread.sleep(delay);
             // set a variable to some value
 //            myVars.putQuoted("DUMMY", "10.0.0.1");
             // apply the template with the variable

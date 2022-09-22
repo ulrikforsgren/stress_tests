@@ -24,11 +24,18 @@ def parseArgs(args):
                         default='localhost:8080')
     parser.add_argument('cmd', choices=['clean', 'create', 'read',
                                         'update', 'delete', 'crud'])
-    parser.add_argument("-n", required=False, type=int)
-    parser.add_argument("-p", required=False, type=int)
-    parser.add_argument("-s", required=False, type=str)
-    parser.add_argument("-v", required=False, action='store_true', default=False)
-    parser.add_argument("--json", required=False, type=str)
+    parser.add_argument("-n", required=False, type=int,
+            help='Number of total requests.')
+    parser.add_argument("-b", required=False, type=int,
+            help='Max batch size. Starting 1, 2, 4, .., max')
+    parser.add_argument("-s", required=False, type=str,
+            help='Batch size(s) comma sepated.')
+    parser.add_argument("-p", required=False, type=str, action='append',
+            help='Alter parameters.')
+    parser.add_argument("-v", required=False, action='store_true',
+            default=False, help='Verbose mode. Show result of each request.')
+    parser.add_argument("--json", required=False, type=str,
+            help='Output result in json format to file.')
     return parser.parse_args(args)
 
 
@@ -108,6 +115,18 @@ class Parameters(dict):
         for v in self.values():
             if isinstance(v, Sequence):
                 v.update_batch()
+    def update_cmdline(self, cmd_p):
+        if cmd_p is None:
+            return
+        if isinstance(cmd_p, str):
+            k, v = cmd_p.split('=')
+            self.update({k: v})
+        elif isinstance(cmd_p, list):
+            for p in cmd_p:
+                k, v = p.split('=')
+                self.update({k: v})
+        else:
+            raise TypeError(f'Invalid type: {type(cmd_p)}')
 
 
 def number_of_open_connections(conn):
@@ -326,8 +345,8 @@ def run_crud_tests(args, tests, n, max_p, task=None, do_print=False):
     n = args.n or n
 
     max_p = min(max_p, n)
-    if args.p:
-        max_p = min(args.p, n)
+    if args.b:
+        max_p = min(args.b, n)
 
     if not args.s:
         n_ps = [ n for n in np_gen(max_p) ]
@@ -339,6 +358,7 @@ def run_crud_tests(args, tests, n, max_p, task=None, do_print=False):
         for op in ['create', 'read', 'update', 'delete']:
             req = tests[op]
             req['host'] = args.host
+            req['parameters'].update_cmdline(args.p)
             results.append((op, n, n_p, run_test_in_subprocess(args, do_test, n, n_p, req, task, do_print)))
     if args.json:
         open(args.json, "w").write(json.dumps(results))
@@ -347,7 +367,7 @@ def run_crud_tests(args, tests, n, max_p, task=None, do_print=False):
 
 def run_single_test(args, tests, task=None):
     n = args.n or 1
-    n_p = args.p or 1
+    n_p = args.b or 1
     req = tests[args.cmd]
     req['host'] = args.host
     elapsed, count, total, count_wrong, count_exc, results = do_test(args, n, n_p, req, task)

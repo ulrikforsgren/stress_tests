@@ -13,7 +13,7 @@ class ServiceCallbacks(Service):
     @Service.create
     def cb_create(self, tctx, root, service, proplist):
         self.log.info('Service create(service=', service._path, ')')
-        time.sleep(0.1)
+        time.sleep(service.delay/1000)
 
 
 

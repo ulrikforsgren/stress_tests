@@ -33,6 +33,11 @@ module empty-python-service {
       uses ncs:service-data;
       ncs:servicepoint empty-python-service-servicepoint;
 
+      leaf delay {
+        type uint16;
+        default 0;
+      }
+
       leaf str-value {
         type string;
       }

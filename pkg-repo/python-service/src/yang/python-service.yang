@@ -33,6 +33,11 @@ module python-service {
       uses ncs:service-data;
       ncs:servicepoint python-service-servicepoint;
 
+      leaf delay {
+        type uint16;
+        default 0;
+      }
+
       leaf str-value {
         type string;
       }
