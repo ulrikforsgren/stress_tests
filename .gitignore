@@ -6,3 +6,8 @@ state/
 storedstate
 follower/
 venv/
+pkg-repo/*/load-dir
+pkg-repo/*/private-jar
+pkg-repo/*/shared-jar
+pkg-repo/*/src/java/build
+pkg-repo/**/namespaces
