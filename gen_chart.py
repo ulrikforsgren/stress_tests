@@ -12,9 +12,18 @@ TODO:
 
 """
 
+import argparse
 import json
 import os.path as path
 import sys
+
+def parseArgs(args):
+    parser = argparse.ArgumentParser()
+    parser.add_argument('result', type=str, nargs='+',
+            help='Result file to convert.')
+    parser.add_argument('-d', type=str,
+            help='Output directory. Default is same dir as the input file.')
+    return parser.parse_args(args)
 
 HEADER = """
 <!DOCTYPE html>
@@ -148,15 +157,7 @@ def transform_crud_results(results):
     return summary_labels, summary_rate, summary_avg, total_details
 
 
-data = {}
-if __name__ == '__main__':
-    name = sys.argv[1]
-    if len(sys.argv)>2:
-        oname = sys.argv[2]+'/'+path.basename(name).rsplit('.',1)[0] + ".html"
-    else:
-        oname = name.rsplit('.',1)[0] + ".html"
-    print(oname)
-
+def generate_html(name, oname):
     results = json.load(open(name))
     of = open(oname, 'w')
 
@@ -172,3 +173,16 @@ if __name__ == '__main__':
     for p, details in total_details.items():
         addDetailedChart(of, f"Time for each request - {p} parallel requests", details)
     of.write(FOOTER)
+
+data = {}
+def main(args):
+    for result in args.result:
+        dirs, fname = path.split(result)
+        name, ext = path.splitext(fname)
+        odirs = args.d or dirs
+        oname = path.join(odirs, name+'.html')
+        generate_html(result, oname)
+        print(f"Created {oname}")
+
+if __name__ == '__main__':
+    main(parseArgs(sys.argv[1:]))
