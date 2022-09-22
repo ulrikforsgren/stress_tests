@@ -15,7 +15,7 @@ from stress_testing import parseArgs, Parameters, SequenceRequest,\
 parameters = Parameters({
     "id": SequenceRequest(0),
     "data": RandomValue(0, 4000000000),
-    "delay": 500
+    "delay": 100
 })
 
 
