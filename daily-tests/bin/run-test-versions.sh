@@ -12,6 +12,10 @@ VERSIONS="
 "
 
 for VER in $VERSIONS; do
+  echo "#######################################"
+  echo "#  Starting tests for NSO $VER"
+  echo "#######################################"
+  echo
   (mkdir $VER; cd $VER; ~/daily-tests/bin/run-test-version.sh $VER build $* | tee run-test-version.log)
   pkill -f ncs.smp
   pkill -f reference_server.py
