@@ -19,6 +19,10 @@ parameters = Parameters({
 
 
 CRUD_TESTS = {
+    '__info':
+        {
+            'name': 'Empty template based service'
+        },
     'clean':
         {
             'op': 'delete',

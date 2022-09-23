@@ -19,6 +19,10 @@ parameters = Parameters({
 
 
 CRUD_TESTS = {
+    '__info':
+        {
+            'name': 'List with a few leafs'
+        },
     'clean':
         {
             'op': 'delete',

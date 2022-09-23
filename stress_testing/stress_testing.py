@@ -356,6 +356,13 @@ def run_crud_tests(args, tests, n, max_p, task=None, do_print=False):
         n_ps = [ int(s) for s in args.s.split(',')]
 
     print()
+    if '__info' in tests:
+        info = tests['__info']
+        if 'name' in info:
+            name = info['name']
+            print(f'==== {name} ====')
+            print()
+
     results = []
     for n_p in n_ps:
         for op in ['create', 'read', 'update', 'delete']:

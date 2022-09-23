@@ -20,6 +20,10 @@ parameters = Parameters({
 
 
 CRUD_TESTS = {
+    '__info':
+        {
+            'name': 'Empty Java based service with a configurable delay'
+        },
     'clean':
         {
             'op': 'delete',
