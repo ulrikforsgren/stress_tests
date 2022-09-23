@@ -6,6 +6,7 @@ state/
 storedstate
 follower/
 venv/
+local-files/
 pkg-repo/*/load-dir
 pkg-repo/*/private-jar
 pkg-repo/*/shared-jar
