@@ -3,8 +3,8 @@
 
 import sys
 
-from stress_testing import parseArgs, Parameters, SequenceRequest,\
-                           RandomValue, run_crud_tests, run_single_test
+from stress_testing.stress_testing import parseArgs, Parameters,\
+     SequenceRequest, RandomValue, run_crud_tests, run_single_test
 
 
 # Inject paramaters that can be update on multiple levels when iterating:
@@ -15,7 +15,7 @@ from stress_testing import parseArgs, Parameters, SequenceRequest,\
 parameters = Parameters({
     "id": SequenceRequest(0),
     "data": RandomValue(0, 4000000000),
-    "delay": 100
+    "delay": 0
 })
 
 
@@ -23,12 +23,12 @@ CRUD_TESTS = {
     'clean':
         {
             'op': 'delete',
-            'url': '/java-service:java-service'
+            'url': '/empty-java-service:empty-java-service'
         },
     'create':
         {
             'op': 'create',
-            'url': '/java-service:java-service',
+            'url': '/empty-java-service:empty-java-service',
             'data': '''{{
                         "service":{{
                             "name":"K{id}",
@@ -41,13 +41,13 @@ CRUD_TESTS = {
     'read':
         {
             'op': 'read',
-            'url': '/java-service:java-service/java-service:service=K{id}',
+            'url': '/empty-java-service:empty-java-service/empty-java-service:service=K{id}',
             'parameters': parameters
         },
     'update':
         {
             'op': 'update',
-            'url': '/java-service:java-service/java-service:service=K{id}',
+            'url': '/empty-java-service:empty-java-service/empty-java-service:service=K{id}',
             'data': '''{{
                         "service":{{
                             "delay":{delay},
@@ -59,7 +59,7 @@ CRUD_TESTS = {
     'delete':
         {
             'op': 'delete',
-            'url': '/java-service:java-service/java-service:service=K{id}',
+            'url': '/empty-java-service:empty-java-service/empty-java-service:service=K{id}',
             'parameters': parameters
         }
 }

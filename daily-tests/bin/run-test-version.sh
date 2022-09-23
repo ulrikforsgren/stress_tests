@@ -34,16 +34,17 @@ cd $DIR
 make venv || exit
 . venv/bin/activate
 
+make single || exit
+
 #
 # Run tests
 #
-
-make single || exit
 
 make start start-refserver
 
 sleep 3 # Wait for reference_server.py to start
 
+. env.sh
 ./run-stress-tests.sh $* localhost:8080
 ./run-delay-stress-tests.sh $* localhost:8080
 
