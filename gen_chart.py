@@ -37,6 +37,7 @@ HEADER = """
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.9.4/Chart.min.js"></script>
   </head>
   <body>
+    <h1>===TITLE===</h1>
     <script>
       function CRUDChart(ctx, labels, data) {
         var myChart = new Chart(ctx, {
