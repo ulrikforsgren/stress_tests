@@ -41,25 +41,25 @@ export HOST=`hostname`
 # Tests, services 0 s delay
 #
 
-./python_service_tests.py --host $NODE crud -n $NREQS -p delay=0 --json $ODIR/python-service-crud-$NREQS-delay-0-$NODE.json
-./python_service_tests.py --host $NODE clean
+./tests/python_service_tests.py --host $NODE crud -n $NREQS -p delay=0 --json $ODIR/python-service-crud-$NREQS-delay-0-$NODE.json
+./tests/python_service_tests.py --host $NODE clean
 
 #
 # Tests, services 0.1 s delay
 #
 
-./python_service_tests.py --host $NODE crud -n $NREQS -p delay=100 --json $ODIR/python-service-crud-$NREQS-delay-0.1-$NODE.json
-./python_service_tests.py --host $NODE clean
+./tests/python_service_tests.py --host $NODE crud -n $NREQS -p delay=100 --json $ODIR/python-service-crud-$NREQS-delay-0.1-$NODE.json
+./tests/python_service_tests.py --host $NODE clean
 
 # Tests, services 0.5 delay
 #
 
-./python_service_tests.py --host $NODE crud -n $NREQS -p delay=500 --json $ODIR/python-service-crud-$NREQS-delay-0.5-$NODE.json
-./python_service_tests.py --host $NODE clean
+./tests/python_service_tests.py --host $NODE crud -n $NREQS -p delay=500 --json $ODIR/python-service-crud-$NREQS-delay-0.5-$NODE.json
+./tests/python_service_tests.py --host $NODE clean
 
 # Tests, services 2.0 delay
 #
 
-./python_service_tests.py --host $NODE crud -n $NREQS -p delay=2000 --json $ODIR/python-service-crud-$NREQS-delay-2.0-$NODE.json
-./python_service_tests.py --host $NODE clean
+./tests/python_service_tests.py --host $NODE crud -n $NREQS -p delay=2000 --json $ODIR/python-service-crud-$NREQS-delay-2.0-$NODE.json
+./tests/python_service_tests.py --host $NODE clean
 

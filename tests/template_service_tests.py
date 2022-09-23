@@ -3,8 +3,8 @@
 
 import sys
 
-from stress_testing import parseArgs, Parameters, SequenceRequest,\
-                           RandomValue, run_crud_tests, run_single_test
+from stress_testing.stress_testing import parseArgs, Parameters,\
+     SequenceRequest, RandomValue, run_crud_tests, run_single_test
 
 
 # Inject paramaters that can be update on multiple levels when iterating:

@@ -3,8 +3,8 @@
 
 import sys
 
-from stress_testing import parseArgs, Parameters, SequenceRequest,\
-                           RandomValue, run_crud_tests, run_single_test
+from stress_testing.stress_testing import parseArgs, Parameters,\
+     SequenceRequest, RandomValue, run_crud_tests, run_single_test
 
 
 # Inject paramaters that can be update on multiple levels when iterating:
@@ -15,7 +15,6 @@ from stress_testing import parseArgs, Parameters, SequenceRequest,\
 parameters = Parameters({
     "id": SequenceRequest(0),
     "data": RandomValue(0, 4000000000),
-    "delay": 0
 })
 
 
@@ -23,16 +22,15 @@ CRUD_TESTS = {
     'clean':
         {
             'op': 'delete',
-            'url': '/empty-python-service:empty-python-service'
+            'url': '/model-a:model-a'
         },
     'create':
         {
             'op': 'create',
-            'url': '/empty-python-service:empty-python-service',
+            'url': '/model-a:model-a',
             'data': '''{{
-                        "service":{{
+                        "list":{{
                             "name":"K{id}",
-                            "delay":{delay},
                             "str-value":"String data {id}"
                         }}
                     }}''',
@@ -41,16 +39,15 @@ CRUD_TESTS = {
     'read':
         {
             'op': 'read',
-            'url': '/empty-python-service:empty-python-service/empty-python-service:service=K{id}',
+            'url': '/model-a:model-a/model-a:list=K{id}',
             'parameters': parameters
         },
     'update':
         {
             'op': 'update',
-            'url': '/empty-python-service:empty-python-service/empty-python-service:service=K{id}',
+            'url': '/model-a:model-a/model-a:list=K{id}',
             'data': '''{{
-                        "service":{{
-                            "delay":{delay},
+                        "list":{{
                             "str-value":"Changed string data {data}"
                         }}
                     }}''',
@@ -59,7 +56,7 @@ CRUD_TESTS = {
     'delete':
         {
             'op': 'delete',
-            'url': '/empty-python-service:empty-python-service/empty-python-service:service=K{id}',
+            'url': '/model-a:model-a/model-a:list=K{id}',
             'parameters': parameters
         }
 }

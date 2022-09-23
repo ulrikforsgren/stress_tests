@@ -9,7 +9,7 @@ import pprint as pp
 import random
 import time
 
-from restconf_api import REQ_DISPATCH, setup, teardown, restconf_request
+from .restconf_api import REQ_DISPATCH, setup, teardown, restconf_request
 
 HOST='localhost'
 PORT=8080

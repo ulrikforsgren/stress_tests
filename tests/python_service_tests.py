@@ -3,8 +3,8 @@
 
 import sys
 
-from stress_testing import parseArgs, Parameters, SequenceRequest,\
-                           RandomValue, run_crud_tests, run_single_test
+from stress_testing.stress_testing import parseArgs, Parameters,\
+     SequenceRequest, RandomValue, run_crud_tests, run_single_test
 
 
 # Inject paramaters that can be update on multiple levels when iterating:
@@ -15,6 +15,7 @@ from stress_testing import parseArgs, Parameters, SequenceRequest,\
 parameters = Parameters({
     "id": SequenceRequest(0),
     "data": RandomValue(0, 4000000000),
+    "delay": 100
 })
 
 
@@ -22,15 +23,16 @@ CRUD_TESTS = {
     'clean':
         {
             'op': 'delete',
-            'url': '/model-a:model-a'
+            'url': '/python-service:python-service'
         },
     'create':
         {
             'op': 'create',
-            'url': '/model-a:model-a',
+            'url': '/python-service:python-service',
             'data': '''{{
-                        "list":{{
+                        "service":{{
                             "name":"K{id}",
+                            "delay":{delay},
                             "str-value":"String data {id}"
                         }}
                     }}''',
@@ -39,15 +41,16 @@ CRUD_TESTS = {
     'read':
         {
             'op': 'read',
-            'url': '/model-a:model-a/model-a:list=K{id}',
+            'url': '/python-service:python-service/python-service:service=K{id}',
             'parameters': parameters
         },
     'update':
         {
             'op': 'update',
-            'url': '/model-a:model-a/model-a:list=K{id}',
+            'url': '/python-service:python-service/python-service:service=K{id}',
             'data': '''{{
-                        "list":{{
+                        "service":{{
+                            "delay":{delay},
                             "str-value":"Changed string data {data}"
                         }}
                     }}''',
@@ -56,7 +59,7 @@ CRUD_TESTS = {
     'delete':
         {
             'op': 'delete',
-            'url': '/model-a:model-a/model-a:list=K{id}',
+            'url': '/python-service:python-service/python-service:service=K{id}',
             'parameters': parameters
         }
 }
