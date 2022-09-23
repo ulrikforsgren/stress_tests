@@ -44,30 +44,30 @@ export HOST=`hostname`
 ./tests/model_a_tests.py --host `echo $NODE | cut -f1 -d:`:8088 crud -n $NREQS --json $ODIR/model-a-crud-$NREQS-refslocal.json
 
 ./tests/model_a_tests.py --host $NODE crud -n $NREQS --json $ODIR/model-a-crud-$NREQS-local.json
-./tests/model_a_tests.py --host $NODE clean
+./tests/model_a_tests.py --host $NODE -q clean
 
 #
 # Tests, empty services
 #
 
 ./tests/empty_template_service_tests.py --host $NODE crud -n $NREQS --json $ODIR/empty-template-service-crud-$NREQS-local.json
-./tests/empty_template_service_tests.py --host $NODE clean
+./tests/empty_template_service_tests.py --host $NODE -q clean
 
 ./tests/empty_python_service_tests.py --host $NODE crud -n $NREQS --json $ODIR/empty-python-service-crud-$NREQS-local.json
-./tests/empty_python_service_tests.py --host $NODE clean
+./tests/empty_python_service_tests.py --host $NODE -q clean
 
 ./tests/empty_java_service_tests.py --host $NODE crud -n $NREQS --json $ODIR/empty-java-service-crud-$NREQS-local.json
-./tests/empty_java_service_tests.py --host $NODE clean
+./tests/empty_java_service_tests.py --host $NODE -q clean
 
 #
 # Tests, services 0.1 s delay
 #
 
 ./tests/template_service_tests.py --host $NODE crud -n $NREQS --json $ODIR/template-service-crud-$NREQS-local.json
-./tests/template_service_tests.py --host $NODE clean
+./tests/template_service_tests.py --host $NODE -q clean
 
 ./tests/python_service_tests.py --host $NODE crud -n $NREQS --json $ODIR/python-service-crud-$NREQS-local.json
-./tests/python_service_tests.py --host $NODE clean
+./tests/python_service_tests.py --host $NODE -q clean
 
 ./tests/java_service_tests.py --host $NODE crud -n $NREQS --json $ODIR/java-service-crud-$NREQS-local.json
-./tests/java_service_tests.py --host $NODE clean
+./tests/java_service_tests.py --host $NODE -q clean

@@ -32,6 +32,8 @@ def parseArgs(args):
             help='Batch size(s) comma sepated.')
     parser.add_argument("-p", required=False, type=str, action='append',
             help='Alter parameters.')
+    parser.add_argument("-q", required=False, action='store_true',
+            default=False, help='Silent mode.')
     parser.add_argument("-v", required=False, action='store_true',
             default=False, help='Verbose mode. Show result of each request.')
     parser.add_argument("--json", required=False, type=str,
@@ -377,13 +379,14 @@ def run_single_test(args, tests, task=None):
     else:
         average = -1
 
-    print()
-    print("Total time:         ", elapsed)
-    print("Count OK:           ", count)
-    print("Per second:         ", count/elapsed)
-    print("Average per request:", average)
-    print("Wrong status:       ", count_wrong)
-    print("Exceptions:         ", count_exc)
+    if not args.q:
+        print()
+        print("Total time:         ", elapsed)
+        print("Count OK:           ", count)
+        print("Per second:         ", count/elapsed)
+        print("Average per request:", average)
+        print("Wrong status:       ", count_wrong)
+        print("Exceptions:         ", count_exc)
 
     return (args.cmd, n, n_p, (elapsed, count, total, average, count_wrong, count_exc, results))
 
