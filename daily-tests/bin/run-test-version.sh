@@ -15,6 +15,9 @@ fi
 export DIR=$2
 export HOST=`hostname`
 
+shift
+shift
+
 #
 # Clone
 #
@@ -41,9 +44,9 @@ make start start-refserver
 
 sleep 3 # Wait for reference_server.py to start
 
-./run-stress-tests.sh localhost:8080 results
+./run-stress-tests.sh $* localhost:8080 results
 
-make stop stop-fwserver
+make stop stop-refserver
 
 #
 # Produce HTML

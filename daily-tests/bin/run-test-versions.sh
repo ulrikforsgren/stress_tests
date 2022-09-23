@@ -7,10 +7,12 @@ VERSIONS="
     5.5
     5.6
     5.7
+    5.8
+    6.0
 "
 
 for VER in $VERSIONS; do
-  (mkdir $VER; cd $VER; ~/daily-tests/bin/run-test-version.sh $VER build | tee run-test-version.log)
+  (mkdir $VER; cd $VER; ~/daily-tests/bin/run-test-version.sh $VER build $* | tee run-test-version.log)
   pkill -f ncs.smp
   pkill -f reference_server.py
 done
