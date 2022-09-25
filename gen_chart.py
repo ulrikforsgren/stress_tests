@@ -15,12 +15,15 @@ TODO:
 import argparse
 import json
 import os.path as path
+from string import Template
 import sys
 
 def parseArgs(args):
     parser = argparse.ArgumentParser()
     parser.add_argument('result', type=str, nargs='+',
             help='Result file to convert.')
+    parser.add_argument('-t', type=str, default='',
+            help='Tag to include in header.')
     parser.add_argument('-d', type=str,
             help='Output directory. Default is same dir as the input file.')
     return parser.parse_args(args)
@@ -32,12 +35,12 @@ HEADER = """
     <!-- Required meta tags -->
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>===TITLE===</title>
+    <title>${TITLE}</title>
     <!--Chart.js JS CDN-->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.9.4/Chart.min.js"></script>
   </head>
   <body>
-    <h1>===TITLE===</h1>
+    <h1>${TAG}${TITLE}</h1>
     <script>
       function CRUDChart(ctx, labels, data) {
         var myChart = new Chart(ctx, {
@@ -158,13 +161,18 @@ def transform_crud_results(results):
     return summary_labels, summary_rate, summary_avg, total_details
 
 
-def generate_html(name, oname):
+def generate_html(args, name, oname):
     results = json.load(open(name))
     of = open(oname, 'w')
 
     summary_labels, summary_rate, summary_avg, total_details = transform_crud_results(results)
 
-    of.write(HEADER.replace('===TITLE===', name))
+    space = '  ' if args.t else ''
+    fields = {
+        'TAG': args.t +('  ' if args.t else ''),
+        'TITLE': name
+    }
+    of.write(Template(HEADER).substitute(fields))
     of.write(BODY)
     of.write('var labels =')
     of.write(json.dumps(summary_labels))
@@ -182,7 +190,7 @@ def main(args):
         name, ext = path.splitext(fname)
         odirs = args.d or dirs
         oname = path.join(odirs, name+'.html')
-        generate_html(result, oname)
+        generate_html(args, result, oname)
         print(f"Created {oname}")
 
 if __name__ == '__main__':

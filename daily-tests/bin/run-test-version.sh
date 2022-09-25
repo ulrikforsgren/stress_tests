@@ -55,4 +55,4 @@ make stop stop-refserver
 #
 
 mkdir -p ~/public_html/daily-tests/$DATE/$NSO_VERSION
-./gen_chart.py -d ~/public_html/daily-tests/$DATE/$NSO_VERSION results/*.json
+./gen_chart.py -t "NSO-$NSO_VERSION" -d ~/public_html/daily-tests/$DATE/$NSO_VERSION results/*.json
