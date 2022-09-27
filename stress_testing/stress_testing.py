@@ -359,7 +359,12 @@ def run_crud_tests(args, tests, n, max_p, task=None, do_print=False):
     if '__info' in tests:
         info = tests['__info']
         if 'name' in info:
-            name = info['name']
+            if 'parameters' in info:
+                params = info['parameters']
+                params.update_cmdline(args.p)
+            else:
+                params = {}
+            name = info['name'].format_map(params)
             print(f'==== {name} ====')
             print()
 

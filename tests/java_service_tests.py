@@ -22,7 +22,8 @@ parameters = Parameters({
 CRUD_TESTS = {
     '__info':
         {
-            'name': 'Java based service with a configurable delay'
+            'name': 'Java based service with a configurable delay ({delay}ms)',
+            'parameters': parameters
         },
     'clean':
         {
