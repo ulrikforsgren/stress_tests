@@ -27,7 +27,7 @@ def parseArgs(args):
     parser.add_argument("-n", required=False, type=int,
             help='Number of total requests.')
     parser.add_argument("-b", required=False, type=int,
-            help='Max batch size. Starting 1, 2, 4, .., max')
+            help='Max batch size. Starting 1, 2, 5, .., max')
     parser.add_argument("-s", required=False, type=str,
             help='Batch size(s) comma sepated.')
     parser.add_argument("-p", required=False, type=str, action='append',
