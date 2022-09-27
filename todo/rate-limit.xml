@@ -1,8 +1,0 @@
-
-<ncs-config xmlns="http://tail-f.com/yang/tailf-ncs-config">
-
-  <webui>
-    <rate-limiting>0</rate-limiting>
-  </webui>
-
-</ncs-config>
