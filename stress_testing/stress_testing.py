@@ -397,3 +397,9 @@ def run_single_test(args, tests, task=None):
 
     return (args.cmd, n, n_p, (elapsed, count, total, average, count_wrong, count_exc, results))
 
+
+def run_test(args, tests, n=500, max_p=50, do_print=True):
+    if args.cmd == 'crud':
+        run_crud_tests(args, tests, n, max_p, do_print=do_print)
+    else:
+        run_single_test(args, tests)
