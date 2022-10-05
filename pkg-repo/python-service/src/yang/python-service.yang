@@ -38,7 +38,15 @@ module python-service {
         default 0;
       }
 
+      leaf device {
+        type string;
+      }
+
       leaf str-value {
+        type string;
+      }
+
+      leaf-list template {
         type string;
       }
     }

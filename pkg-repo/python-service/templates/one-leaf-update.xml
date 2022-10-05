@@ -1,0 +1,11 @@
+<config-template xmlns="http://tail-f.com/ns/config/1.0">
+  <devices xmlns="http://tail-f.com/ns/ncs">
+    <device>
+      <name>{/device}</name>
+      <config>
+        <hostname xmlns="http://example.com/router">{/device}-update</hostname>
+        <hostname xmlns="urn:ios">{/device}-update</hostname>
+      </config>
+    </device>
+  </devices>
+</config-template>

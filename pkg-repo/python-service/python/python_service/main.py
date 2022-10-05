@@ -14,6 +14,11 @@ class ServiceCallbacks(Service):
     def cb_create(self, tctx, root, service, proplist):
         self.log.info('Service create(service=', service._path, ')')
         time.sleep(service.delay/1000)
+        vars = ncs.template.Variables()
+        for t in service.template:
+            #vars.add('DUMMY', '127.0.0.1')
+            template = ncs.template.Template(service)
+            template.apply(t, vars)
 
 
 
