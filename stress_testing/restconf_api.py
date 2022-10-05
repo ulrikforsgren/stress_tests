@@ -16,12 +16,12 @@ HEADERS_JSON={
 
 # Expected response status for successful requests.
 REQ_DISPATCH = {
-    'create': ('POST', 201),
-    'read':   ('GET', 200),
-    'update': ('PATCH', 204),
-    'set': ('PUT', 204),
-    'delete': ('DELETE', 204),
-    'action': ('POST', 204)
+    'create': ('POST', [201]),
+    'read':   ('GET', [200]),
+    'update': ('PATCH', [200, 204]),
+    'set': ('PUT', [204]),
+    'delete': ('DELETE', [200, 204]),
+    'action': ('POST', [204])
 }
 
 # This method is an extension of TCPConnector to setup an number of connections
@@ -70,7 +70,7 @@ async def restconf_request(client, host, op, resource, data=None,
                     data = await response.json()
                 else:
                     data = await response.text()
-            res = 'ok' if response.status == expected_status else 'nok'
+            res = 'ok' if response.status in expected_status else 'nok'
             return (rid, res, response.status, data)
     except Exception as e:
         return (rid, 'exception', repr(e))
