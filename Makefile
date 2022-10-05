@@ -9,7 +9,8 @@ SINGLE_PACKAGES = \
     template-service\
     python-service\
     java-service\
-    router
+    router\
+    cisco-ios-cli-3.0
 
 ifeq "$(NCS_DIR)" ""
 $(error NCS_DIR is not setup. Source ncsrc to setup NSO environment before proceeding)

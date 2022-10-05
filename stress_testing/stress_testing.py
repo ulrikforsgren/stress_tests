@@ -143,6 +143,17 @@ async def setup_connections(n_p, client, host):
               for p in range(0,n_p) ]
     await asyncio.gather(*tasks)
     #await asyncio.wait(tasks)
+
+
+async def until_commit_queue_empty(client, host):
+    # create is used as a workaround for operations
+    print("Waiting for CQ to empty")
+    await restconf_request(client, host, 'create',
+                           '/devices/commit-queue/wait-until-empty',
+                           resource_type='operations')
+    print("Empty!")
+
+
 #
 # n_p connections are setup and reused for the whole test.
 #
@@ -221,6 +232,7 @@ async def stress_requests_window(n, n_p, setup, teardown, task, args):
         tasks = pending
 
     elapsed = time.monotonic()-st
+    await until_commit_queue_empty(args['client'], args['host'])
     await teardown(args)
     return elapsed, results
 
