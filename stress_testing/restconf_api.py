@@ -1,6 +1,8 @@
 # -*- mode: python; python-indent: 4 -*-
 
+import asyncio
 from base64 import b64encode
+import json
 import aiohttp
 from yarl import URL
 
@@ -17,6 +19,7 @@ REQ_DISPATCH = {
     'create': ('POST', 201),
     'read':   ('GET', 200),
     'update': ('PATCH', 204),
+    'set': ('PUT', 204),
     'delete': ('DELETE', 204),
     'action': ('POST', 204)
 }
@@ -71,3 +74,19 @@ async def restconf_request(client, host, op, resource, data=None,
             return (rid, res, response.status, data)
     except Exception as e:
         return (rid, 'exception', repr(e))
+
+
+async def single_request(host, op, url, data=None):
+    conn = aiohttp.TCPConnector(limit=0)
+    client = aiohttp.ClientSession(connector=conn)
+    resp = await restconf_request(client,
+                                  host,
+                                  op,
+                                  url,
+                                  data=json.dumps(data))
+    await client.close()
+    return resp
+
+
+def run_single_request(host, op, url, data=None):
+    return asyncio.run(single_request(host, op, url, data=data))
