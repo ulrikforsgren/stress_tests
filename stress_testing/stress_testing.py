@@ -147,11 +147,9 @@ async def setup_connections(n_p, client, host):
 
 async def until_commit_queue_empty(client, host):
     # create is used as a workaround for operations
-    print("Waiting for CQ to empty")
     await restconf_request(client, host, 'create',
                            '/devices/commit-queue/wait-until-empty',
                            resource_type='operations')
-    print("Empty!")
 
 
 #
