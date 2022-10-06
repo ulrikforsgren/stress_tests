@@ -229,8 +229,8 @@ async def stress_requests_window(n, n_p, setup, teardown, task, args):
         n -= tasks_to_start
         tasks = pending
 
-    elapsed = time.monotonic()-st
     await until_commit_queue_empty(args['client'], args['host'])
+    elapsed = time.monotonic()-st
     await teardown(args)
     return elapsed, results
 
