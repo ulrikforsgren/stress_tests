@@ -57,12 +57,15 @@ async def restconf_request(client, host, op, resource, data=None,
     rid = request_id
     method, expected_status = REQ_DISPATCH[op]
     url = f'http://{host}/restconf/{resource_type}{resource}'
+    if params is not None:
+        # aiohttp request uses yarl.URL is used for params and can not handle
+        # params without equal sign (=). Putting them directly in the url instead.
+        url += '?' + params
     try:
         if data is not None:
               data=data.encode('utf-8')
         async with client.request(method, url, headers=HEADERS_JSON,
-                                  data=data,
-                                  params=params) as response:
+                                  data=data) as response:
             if response.status in [ 201, 204 ]:
                 data = None # No content is expected.
             else:

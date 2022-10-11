@@ -32,6 +32,10 @@ def parseArgs(args):
             help='Batch size(s) comma sepated.')
     parser.add_argument("-p", required=False, type=str, action='append',
             help='Alter parameters.')
+    parser.add_argument("--no-networking", required=False, action='store_true',
+            default=False, help='Commit with no-networking.')
+    parser.add_argument("--commit-queue", required=False, action='store_true',
+            default=False, help='Commit to commit-queue.')
     parser.add_argument("-q", required=False, action='store_true',
             default=False, help='Silent mode.')
     parser.add_argument("-v", required=False, action='store_true',
@@ -152,34 +156,6 @@ async def until_commit_queue_empty(client, host):
                            resource_type='operations')
 
 
-#
-# n_p connections are setup and reused for the whole test.
-#
-async def stress_requests(n, n_p, setup, teardown, task, args):
-    results = []
-    await setup(args)
-    conn = args['client']._connector
-    await conn.setup_pool_connections(conn, args['host'], n_p)
-    #nc = number_of_open_connections(conn)
-    ## NOTE: This is a brute force method of setting up the connections...
-    #print(number_of_open_connections(conn))
-    #while nc<n_p:
-    #    print("XXXXXXXXXXXXXXXXXXXXX", n_p - nc)
-    #    await setup_connections(n_p, args['client'], args['host'])
-    #    nc = number_of_open_connections(conn)
-    #print(number_of_open_connections(conn))
-    st = time.monotonic()
-    while n>0: # Execute requests in batches of n_p in parellel.
-        if n<n_p: n_p = n
-        tasks = [ asyncio.create_task(task(**args))
-                  for p in range(0,n_p)]
-        results += await asyncio.gather(*tasks)
-        if 'parameters' in args:
-            args['parameters'].update_batch()
-        n -= n_p
-    elapsed = time.monotonic()-st
-    await teardown(args)
-    return elapsed, results
 
 #
 # n_p connections are setup for each batch then closed
@@ -254,7 +230,7 @@ async def setup_task(client, host):
     return (*resp, elapsed)
 
 async def default_task(client=None, parameters=Parameters(), host='', op='',
-                       url='', data='', resource_type='data'):
+                       url='', data='', resource_type='data', params=None):
     url = url.format_map(parameters)
     data = data.format_map(parameters)
     parameters.update_request()
@@ -264,7 +240,8 @@ async def default_task(client=None, parameters=Parameters(), host='', op='',
                                   op,
                                   url,
                                   data,
-                                  resource_type)
+                                  resource_type,
+                                  params)
     elapsed = time.monotonic()-st
     return (*resp, elapsed)
 
@@ -311,9 +288,22 @@ def calc_average(results):
 
     return count_ok, total_ok, count_wrong, count_exc
 
+def set_flags(args, req):
+    flags = ''
+    def add_flag(flags, flag):
+        if flags:
+            flags += '&'
+        flags += flag
+        return flags
+    if args.no_networking:
+        flags = add_flag(flags, "no-networking")
+    if args.commit_queue:
+        flags = add_flag(flags, "commit-queue")
+    req['params'] = flags
 
 def do_test(args, n, n_p, req, task=None):
     task = task or default_task
+    set_flags(args, req)
     elapsed, results = asyncio.run(stress_requests_window(n, n_p, setup, teardown, task, req))
 
     if args.v:
