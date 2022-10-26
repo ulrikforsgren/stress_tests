@@ -5,6 +5,14 @@
       <config>
         <hostname xmlns="http://example.com/router">{/device}-update</hostname>
         <hostname xmlns="urn:ios">{/device}-update</hostname>
+        <?for i=1; {$i <= /num-vlan}; i={$i + 1} ?>
+        <vlan xmlns="urn:ios">
+          <vlan-list>
+            <id>{$i}</id>
+            <name>VLAN UPDATE {$i}</name>
+          </vlan-list>
+        </vlan>
+        <?end?>
       </config>
     </device>
   </devices>
