@@ -1,4 +1,5 @@
 *.pyc
+ncs.conf
 ncs-cdb/
 logs/
 packages/
@@ -12,3 +13,11 @@ pkg-repo/*/private-jar
 pkg-repo/*/shared-jar
 pkg-repo/*/src/java/build
 pkg-repo/**/namespaces
+pkg-repo/**/ncsc-out
+pkg-repo/**/*fxs
+pkg-repo/**/*ccl
+pkg-repo/**/package-meta-data.xml
+pkg-repo/**/build-meta-data.xml
+pkg-repo/BUILT
+SINGLE-BUILD
+README.ncs

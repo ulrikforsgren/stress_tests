@@ -46,28 +46,28 @@ def create_device(devices, name, address, port, t, nedid, authgrp):
     dev.state.admin_state = "unlocked"
 
 def main(args):
-        n = 0
-        n_devices = args.count
-        p_devices = 100
+    n = 0
+    n_devices = args.count
+    p_devices = 100
 
-        do_create_devices = True
-        while do_create_devices:
-            with ncs.maapi.single_write_trans('admin', 'system') as t:
-                x = n
-                start = time.monotonic()
-                for _ in range(0, p_devices):
-                    r = ncs.maagic.get_root(t)
-                    dt, nedid = NEDIDs[args.type]
-                    create_device(r.devices, f'{args.name}{n}', args.address,
-                                  args.port+n, dt, nedid, 'default')
-                    n += 1
-                    if n>=n_devices: break
-                t.apply()
-                elap = time.monotonic()-start
-                print(f"Devices {args.name}{x}-{args.name}{n-1} created in ", elap, "seconds.")
-                if n>=n_devices:
-                    do_create_devices = False
-                    break
+    do_create_devices = True
+    while do_create_devices:
+        with ncs.maapi.single_write_trans('admin', 'system') as t:
+            x = n
+            start = time.monotonic()
+            for _ in range(0, p_devices):
+                r = ncs.maagic.get_root(t)
+                dt, nedid = NEDIDs[args.type]
+                create_device(r.devices, f'{args.name}{n}', args.address,
+                                args.port+n, dt, nedid, 'default')
+                n += 1
+                if n>=n_devices: break
+            t.apply()
+            elap = time.monotonic()-start
+            print(f"Devices {args.name}{x}-{args.name}{n-1} created in ", elap, "seconds.")
+            if n>=n_devices:
+                do_create_devices = False
+                break
 
 if __name__ == '__main__':
     main(parseArgs(sys.argv[1:]))
