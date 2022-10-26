@@ -8,6 +8,7 @@ from multiprocessing import Pool
 import pprint as pp
 import random
 import time
+from xmlrpc.client import boolean
 
 from .restconf_api import REQ_DISPATCH, setup, teardown, restconf_request
 
@@ -17,15 +18,17 @@ PORT=8080
 pprint = pp.PrettyPrinter(indent=4).pprint
 
 
-def parseArgs(args):
+def parseArgs(args, extra_actions=[]):
     parser = argparse.ArgumentParser()
     parser.add_argument('--host', type=str,
                         help='host[:port]',
                         default='localhost:8080')
     parser.add_argument('cmd', choices=['clean', 'create', 'read',
-                                        'update', 'delete', 'crud'])
+                                        'update', 'delete', 'crud'] + extra_actions)
     parser.add_argument("-n", required=False, type=int,
             help='Number of total requests.')
+    parser.add_argument("-o", required=False, action='store_true', default=False,
+            help="Run only one test instead of a sequence of tests")
     parser.add_argument("-b", required=False, type=int,
             help='Max batch size. Starting 1, 2, 5, .., max')
     parser.add_argument("-s", required=False, type=str,
@@ -343,7 +346,7 @@ def np_gen(max_p):
                 return
         m *= 10
 
-def run_crud_tests(args, tests, n, max_p, task=None, do_print=False):
+def run_tests(which, args, tests, n, max_p, task=None, do_print=False):
     n = args.n or n
 
     max_p = min(max_p, n)
@@ -370,7 +373,7 @@ def run_crud_tests(args, tests, n, max_p, task=None, do_print=False):
 
     results = []
     for n_p in n_ps:
-        for op in ['create', 'read', 'update', 'delete']:
+        for op in which:
             req = tests[op]
             req['host'] = args.host
             req['parameters'].update_cmdline(args.p)
@@ -379,12 +382,14 @@ def run_crud_tests(args, tests, n, max_p, task=None, do_print=False):
         open(args.json, "w").write(json.dumps(results))
     return results
 
+def run_crud_tests(args, tests, n, max_p, task=None, do_print=False):
+    return run_tests(['create', 'read', 'update', 'delete'], args, tests, n, max_p, task, do_print)
 
-def run_single_test(args, tests, task=None):
+def run_single_test(tc, args, tests, task=None):
     n = args.n or 1
     n_p = args.b or 1
-    req = tests[args.cmd]
-    req['host'] = args.host
+    req = tests[tc]
+    req['host']  = args.host
     elapsed, count, total, count_wrong, count_exc, results = do_test(args, n, n_p, req, task)
     if count:
         average=total/count
@@ -402,9 +407,15 @@ def run_single_test(args, tests, task=None):
 
     return (args.cmd, n, n_p, (elapsed, count, total, average, count_wrong, count_exc, results))
 
-
 def run_test(args, tests, n=500, max_p=50, do_print=True):
-    if args.cmd == 'crud':
-        run_crud_tests(args, tests, n, max_p, do_print=do_print)
+    if args.cmd == 'clean':
+        run_single_test('clean', args, tests)
     else:
-        run_single_test(args, tests)
+        if args.cmd == 'crud':
+            tc = ['create', 'read', 'update', 'delete']
+            run_tests(tc, args, tests, n, max_p, None, do_print)
+        else :
+            if args.o:
+                run_single_test(args.cmd, args, tests)
+            else:
+                run_tests([args.cmd], args, tests, n, max_p, None, do_print)

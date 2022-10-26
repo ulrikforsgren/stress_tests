@@ -15,20 +15,32 @@ from stress_testing.stress_testing import parseArgs, Parameters,\
 parameters = Parameters({
     "id": SequenceRequest(0),
     "data": RandomValue(0, 4000000000),
-    "delay": 0
+    "delay": 0,
+    "numvlan": 0
 })
 
 
 CRUD_TESTS = {
     '__info':
         {
-            'name': 'Python based service with a configurable delay ({delay}ms)',
+            'name': 'Python based service with a configurable delay ({delay}ms) and vlans ({numvlan} vlans)',
             'parameters': parameters
         },
     'clean':
         {
             'op': 'delete',
             'url': '/python-service:python-service'
+        },
+    're-deploy': 
+        {
+            'op': 'action',
+            'url': '/python-service:python-service/python-service:service=K{id}/re-deploy',
+            'data': '''{{
+                    "input" : {{
+                        "dry-run":  {{}}
+                    }}
+                }}''',
+            'parameters': parameters
         },
     'create':
         {
@@ -40,7 +52,8 @@ CRUD_TESTS = {
                             "delay":{delay},
                             "device":"r{id}",
                             "template":"one-leaf",
-                            "str-value":"String data {id}"
+                            "str-value":"String data {id}",
+                            "num-vlan":{numvlan}
                         }}
                     }}''',
             'parameters': parameters
@@ -60,7 +73,8 @@ CRUD_TESTS = {
                             "delay":{delay},
                             "device":"r{id}",
                             "template":"one-leaf-update",
-                            "str-value":"Changed string data {data}"
+                            "str-value":"Changed string data {data}",
+                            "num-vlan":{numvlan}
                         }}
                     }}''',
             'parameters': parameters
@@ -74,4 +88,4 @@ CRUD_TESTS = {
 }
 
 if __name__ == '__main__':
-    run_test(parseArgs(sys.argv[1:]), CRUD_TESTS, 500, 40)
+    run_test(parseArgs(sys.argv[1:], ['re-deploy', 'action','login']), CRUD_TESTS, 500, 40)
