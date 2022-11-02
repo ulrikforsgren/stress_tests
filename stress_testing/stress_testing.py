@@ -17,6 +17,17 @@ PORT=8080
 
 pprint = pp.PrettyPrinter(indent=4).pprint
 
+class ansi:
+    RST =       '\033[0m'
+    BOLD =      '\033[1m'
+    DIM =       '\033[2m'
+    UNDERLINE = '\033[4m'
+    PINK =      '\033[95m'
+    BLUE =      '\033[94m'
+    GREEN =     '\033[92m'
+    YELLOW =    '\033[93m'
+    RED =       '\033[91m'
+
 
 def parseArgs(args, extra_actions=[]):
     parser = argparse.ArgumentParser()
@@ -45,6 +56,8 @@ def parseArgs(args, extra_actions=[]):
             default=False, help='Verbose mode. Show result of each request.')
     parser.add_argument("--json", required=False, type=str,
             help='Output result in json format to file.')
+    parser.add_argument("--highlight", required=False, action='store_true',
+            default=False, help='Highlight output to make it more readable.')
     return parser.parse_args(args)
 
 
@@ -372,12 +385,14 @@ def run_tests(which, args, tests, n, max_p, task=None, do_print=False):
             print()
 
     results = []
-    for n_p in n_ps:
+    for r, n_p in enumerate(n_ps):
+        if args.highlight and r%2 == 1: print(ansi.DIM, end='')
         for op in which:
             req = tests[op]
             req['host'] = args.host
             req['parameters'].update_cmdline(args.p)
             results.append((op, n, n_p, run_test_in_subprocess(args, do_test, n, n_p, req, task, do_print)))
+        if args.highlight and r%2 == 1: print(ansi.RST, end='')
     if args.json:
         open(args.json, "w").write(json.dumps(results))
     return results
