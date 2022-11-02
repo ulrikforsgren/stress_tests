@@ -1,0 +1,17 @@
+<config-template xmlns="http://tail-f.com/ns/config/1.0">
+    <devices xmlns="http://tail-f.com/ns/ncs">
+      <device>
+        <name>{/device}</name>
+        <config>
+          <?for i=1; {$i <= /num-vlan}; i={$i + 1} ?>
+          <vlan xmlns="urn:ios">
+            <vlan-list>
+              <id>{$i}</id>
+              <name>VLAN UPDATE {$i} {/str-value}</name>
+            </vlan-list>
+          </vlan>
+          <?end?>
+        </config>
+      </device>
+    </devices>
+  </config-template>

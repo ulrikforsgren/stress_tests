@@ -16,6 +16,34 @@ import com.tailf.ncs.template.TemplateVariables;
 public class javaserviceRFS {
 
 
+   /**
+     * Init method for selftest action
+     */
+    @ActionCallback(callPoint="action-action", callType=ActionCBType.INIT)
+    public void init(DpActionTrans trans) throws DpCallbackException {
+    }
+
+    /**
+     * Selftest action implementation for service
+     */
+    @ActionCallback(callPoint="action-action", callType=ActionCBType.ACTION)
+    public ConfXMLParam[] selftest(DpActionTrans trans, ConfTag name,
+                                   ConfObject[] kp, ConfXMLParam[] params)
+    throws DpCallbackException {
+        try {
+            // Refer to the service yang model prefix
+            String nsPrefix = "java-service";
+            // Get the service instance key
+            String str = "ok"; //            ((ConfKey)kp[0]).toString();
+
+          return new ConfXMLParam[] {
+              new ConfXMLParamValue(nsPrefix, "success", new ConfBool(true)),
+              new ConfXMLParamValue(nsPrefix, "message", new ConfBuf(str))};
+
+        } catch (Exception e) {
+            throw new DpCallbackException("action failed", e);
+        }
+    }
     /**
      * Create callback method.
      * This method is called when a service instance committed due to a create

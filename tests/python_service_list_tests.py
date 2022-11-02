@@ -16,14 +16,14 @@ parameters = Parameters({
     "id": SequenceRequest(0),
     "data": RandomValue(0, 4000000000),
     "delay": 0,
-    "numvlan": 0
+    "numvlan": 100
 })
 
 
 CRUD_TESTS = {
     '__info':
         {
-            'name': 'Python based service with a configurable delay ({delay}ms) and vlans ({numvlan} vlans)',
+            'name': 'Python based service, list test, with a configurable delay ({delay}ms) and vlans ({numvlan} vlans)',
             'parameters': parameters
         },
     'clean':
@@ -51,7 +51,7 @@ CRUD_TESTS = {
                             "name":"K{id}",
                             "delay":{delay},
                             "device":"r{id}",
-                            "template":"one-leaf",
+                            "template":"vlans",
                             "str-value":"String data {id}",
                             "num-vlan":{numvlan}
                         }}
@@ -72,7 +72,7 @@ CRUD_TESTS = {
                         "service":{{
                             "delay":{delay},
                             "device":"r{id}",
-                            "template":"one-leaf-update",
+                            "template":"vlans",
                             "str-value":"Changed string data {data}",
                             "num-vlan":{numvlan}
                         }}

@@ -46,6 +46,10 @@ module python-service {
         type string;
       }
 
+      leaf num-vlan {
+        type uint16;
+        default 0;
+      }
       leaf-list template {
         type string;
       }

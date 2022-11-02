@@ -21,7 +21,7 @@ REQ_DISPATCH = {
     'update': ('PATCH', [200, 204]),
     'set': ('PUT', [204]),
     'delete': ('DELETE', [200, 204]),
-    'action': ('POST', [204])
+    'action': ('POST', [200, 204])
 }
 
 # This method is an extension of TCPConnector to setup an number of connections

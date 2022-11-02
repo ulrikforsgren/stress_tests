@@ -13,6 +13,19 @@ module java-service {
   }
 
   container java-service {
+   tailf:action action {
+      tailf:actionpoint action-action;
+      output {
+        leaf success {
+          type boolean;
+        }
+        leaf message {
+          type string;
+          description
+            "Free format message.";
+        }
+      }
+    }
     list service {
       description "Parameterized Java based service";
 
