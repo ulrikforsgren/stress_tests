@@ -3,8 +3,8 @@
 
 import argparse
 import asyncio
+import copy
 import json
-from multiprocessing import Pool
 import pprint as pp
 import random
 import time
@@ -91,6 +91,9 @@ class Sequence:
         pass
     def update_batch(self):
         pass
+    def __copy__(self):
+        return self.__class__(self.n)
+
 
 class SequenceRequest(Sequence):
     def __init__(self, n, wrap=None):
@@ -220,7 +223,6 @@ async def stress_requests_window(n, n_p, setup, teardown, task, args):
             pending.add(asyncio.create_task(task(**args)))
         n -= tasks_to_start
         tasks = pending
-
     await until_commit_queue_empty(args['client'], args['host'])
     elapsed = time.monotonic()-st
     await teardown(args)
@@ -329,23 +331,25 @@ def do_test(args, n, n_p, req, task=None):
 
     return elapsed, count, total, count_wrong, count_exc, results
 
+
 #
 # Run test in subprocess to ensure proper cleanup between test iterations.
 #
 def run_test_in_subprocess(args, func, n, n_p, req, task=None, do_print=False):
-    with Pool(processes=1) as pool:
-        res = pool.apply(func, (args, n, n_p, req, task))
-        elapsed, count, total, count_wrong, count_exc, results = res
-        if count:
-            average=total/count
-        else:
-            average = -1
-        if do_print:
-            op = req['op'].upper()
-            print(f'{op:<6} {count:>5} {n_p:>3} {elapsed:>5.1f} {count/elapsed:>6.1f} {average:>6.3f} {count_wrong:>5} {count_exc:>5}')
-        pool.close()
-        return elapsed, count, total, average, count_wrong, count_exc, results
+    req = copy.deepcopy(req)
+    result = func(args, n, n_p, req, task)
+    elapsed, count, total, count_wrong, count_exc, results = result
+    if count:
+        average=total/count
+    else:
+        average = -1
+    if do_print:
+        op = req['op'].upper()
+        print(f'{op:<6} {count:>5} {n_p:>3} {elapsed:>5.1f} {count/elapsed:>6.1f} {average:>6.3f} {count_wrong:>5} {count_exc:>5}', flush=True)
+    return elapsed, count, total, average, count_wrong, count_exc, results
 
+
+# Generator for 1,2,5,10,20,... sequence
 def np_gen(max_p):
     n = 1
     m = 1
@@ -359,6 +363,7 @@ def np_gen(max_p):
                 return
         m *= 10
 
+
 def run_tests(which, args, tests, n, max_p, task=None, do_print=False):
     n = args.n or n
 
@@ -369,7 +374,7 @@ def run_tests(which, args, tests, n, max_p, task=None, do_print=False):
     if not args.s:
         n_ps = [ n for n in np_gen(max_p) ]
     else:
-        n_ps = [ int(s) for s in args.s.split(',')]
+        n_ps = list(map(int, args.s.split(',')))
 
     print()
     if '__info' in tests:
