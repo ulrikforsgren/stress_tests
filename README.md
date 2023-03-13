@@ -17,6 +17,13 @@ the behavior of NSO depending on a number of factors:
 * Use of different service types: template, Python, Java, ...
 * ...
 
+## Reports
+
+Save output as json and generate HTML reports for easy analysis of data.
+
+![Screenshot](doc/transactional-troughput.png)
+![Screenshot](doc/request-duration.png)
+
 ## Strategy
 
 The framework is intended to be simplistic, easy to setup and parameterized to
@@ -97,11 +104,11 @@ additional environment with Docker is in the pipeline.
 
 ### Run tests
 
-    ./model_a_tests.py create -n 100
-    ./model_a_tests.py read -n 100
-    ./model_a_tests.py update -n 100
-    ./model_a_tests.py delete -n 100
+    ./tests/model_a_tests.py create -n 100
+    ./tests/model_a_tests.py read -n 100
+    ./tests/model_a_tests.py update -n 100
+    ./tests/model_a_tests.py delete -n 100
 
-    ./model_a_tests.py clean
+    ./tests/model_a_tests.py clean
 
-    ./model_a_tests.py crud
+    ./tests/model_a_tests.py crud
