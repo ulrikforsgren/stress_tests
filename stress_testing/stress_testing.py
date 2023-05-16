@@ -34,8 +34,9 @@ def parseArgs(args, extra_actions=[]):
     parser.add_argument('--host', type=str,
                         help='host[:port]',
                         default='localhost:8080')
-    parser.add_argument('cmd', choices=['clean', 'create', 'read',
-                                        'update', 'delete', 'crud'] + extra_actions)
+    parser.add_argument('cmd', nargs='+', choices=['clean', 'create', 'read',
+                                        'update', 'delete', 'crud', 'cud']
+                                        + extra_actions)
     parser.add_argument("-n", required=False, type=int,
             help='Number of total requests.')
     parser.add_argument("-o", required=False, action='store_true', default=False,
@@ -46,6 +47,8 @@ def parseArgs(args, extra_actions=[]):
             help='Batch size(s) comma sepated.')
     parser.add_argument("-p", required=False, type=str, action='append',
             help='Alter parameters.')
+    parser.add_argument("--single", required=False, action='store_true',
+            default=False, help='Run single test.')
     parser.add_argument("--no-networking", required=False, action='store_true',
             default=False, help='Commit with no-networking.')
     parser.add_argument("--commit-queue", required=False, action='store_true',
@@ -431,11 +434,16 @@ def run_test(args, tests, n=500, max_p=50, do_print=True):
     if args.cmd == 'clean':
         run_single_test('clean', args, tests)
     else:
-        if args.cmd == 'crud':
-            tc = ['create', 'read', 'update', 'delete']
-            run_tests(tc, args, tests, n, max_p, None, do_print)
-        else :
-            if args.o:
-                run_single_test(args.cmd, args, tests)
+        tc = []
+        for c in args.cmd:
+            if c == 'crud':
+                tc += ['create', 'read', 'update', 'delete']
+            elif c == 'cud':
+                tc += ['create', 'update', 'delete']
             else:
-                run_tests([args.cmd], args, tests, n, max_p, None, do_print)
+                tc.append(c)
+
+        if args.o:
+            run_single_test(tc[0], args, tests)
+        else:
+            run_tests(tc, args, tests, n, max_p, None, do_print)
