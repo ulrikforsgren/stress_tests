@@ -5,8 +5,8 @@ import asyncio
 import sys
 import time
 
-from stress_testing import parseArgs, Parameters, SequenceRequest,\
-                           run_crud_tests, run_single_test
+from stress_testing.stress_testing import parseArgs, Parameters, SequenceRequest,\
+                           run_test
 
 
 # Inject paramaters that can be update on multiple levels when iterating:
@@ -48,7 +48,8 @@ CRUD_TESTS = {
 }
 
 
-async def timeout_task(client=None, parameters=Parameters(), host='', op='', url='', data=''):
+async def timeout_task(client=None, parameters=Parameters(), host='', op='',
+                       url='', data='', resource_type=None, params=None):
     url = url.format_map(parameters)
     data = data.format_map(parameters)
     parameters.update_request()
@@ -57,10 +58,5 @@ async def timeout_task(client=None, parameters=Parameters(), host='', op='', url
     elapsed = time.monotonic()-st
     return (parameters['id'], 'ok', 200, "String result", elapsed)
 
-
 if __name__ == '__main__':
-    args = parseArgs(sys.argv[1:])
-    if args.cmd == 'crud':
-        run_crud_tests(args, CRUD_TESTS, 10, max_p=10, task=timeout_task, do_print=True)
-    else:
-        run_single_test(args, CRUD_TESTS, task=timeout_task)
+    run_test(parseArgs(sys.argv[1:]), CRUD_TESTS, 1, 1, timeout_task, True)

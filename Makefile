@@ -9,8 +9,7 @@ SINGLE_PACKAGES = \
     template-service\
     python-service\
     java-service\
-    router\
-    cisco-ios-cli-3.0
+    router
 
 ifeq "$(NCS_DIR)" ""
 $(error NCS_DIR is not setup. Source ncsrc to setup NSO environment before proceeding)
@@ -148,6 +147,7 @@ ha-status-single:
 build-pkgs: pkg-repo/BUILT
 pkg-repo/BUILT:
 	for i in $(shell find pkg-repo -type d -maxdepth 1 -mindepth 1); do \
+	  echo "==== Building $${i} ===="; \
 	  $(MAKE) -C $${i}/src all || exit 1; \
 	done
 	touch pkg-repo/BUILT
@@ -163,7 +163,7 @@ venv/bin/activate:
 #
 
 ncs.conf:
-	ncs-setup --dest .
+	ncs-setup --dest . --package cisco-ios-cli-3.0
 
 follower/ncs.conf:
 	mkdir follower; \

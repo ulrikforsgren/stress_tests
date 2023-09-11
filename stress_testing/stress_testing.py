@@ -430,7 +430,7 @@ def run_single_test(tc, args, tests, task=None):
 
     return (args.cmd, n, n_p, (elapsed, count, total, average, count_wrong, count_exc, results))
 
-def run_test(args, tests, n=500, max_p=50, do_print=True):
+def run_test(args, tests, n=500, max_p=50, task=None, do_print=True):
     if args.cmd == 'clean':
         run_single_test('clean', args, tests)
     else:
@@ -444,6 +444,6 @@ def run_test(args, tests, n=500, max_p=50, do_print=True):
                 tc.append(c)
 
         if args.o:
-            run_single_test(tc[0], args, tests)
+            run_single_test(tc[0], args, tests, task=task)
         else:
-            run_tests(tc, args, tests, n, max_p, None, do_print)
+            run_tests(tc, args, tests, n, max_p, task, do_print)
