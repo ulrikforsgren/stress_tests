@@ -65,18 +65,21 @@ class DataQueue(queue.Queue):
         return self.r.fileno()
 
 
+gargs = {
+    'n_p': 20,
+}
 stop_requests = False
-async def stress_requests_stream(n, n_p, setup, teardown, task, args):
-    global stop_requests
+stop_event = asyncio.Event()
+async def stress_requests_stream(task, args):
+    global stop_requests, gargs
     tasks = set()
 
     await setup(args)
 
     try:
-        # Start initial tasks, but no more than n_p
-        for _ in range(0, min(n, n_p)):
+        # Start initial n_p tasks
+        for _ in range(0, gargs['n_p']):
             tasks.add(asyncio.create_task(task(**args)))
-        n -= min(n, n_p)
 
         while len(tasks)>0 and not stop_requests:
             done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
@@ -84,14 +87,15 @@ async def stress_requests_stream(n, n_p, setup, teardown, task, args):
                 result = await d
                 q.put(result)
             # Start new tasks, but no more than n_p in total.
-            a = n_p-len(pending)  # Calculate number of free task slots
-            tasks_to_start = min(a, n)
-            for _ in range(0, tasks_to_start): # Start tasks in available slots
-                pending.add(asyncio.create_task(task(**args)))
-            n -= tasks_to_start
+            tasks_to_start = gargs['n_p']-len(pending)  # Calculate number of free task slots
+            if tasks_to_start>0:
+                for _ in range(0, tasks_to_start): # Start tasks in available slots
+                    pending.add(asyncio.create_task(task(**args)))
             tasks = pending
     except asyncio.CancelledError:
-        pass 
+        pass
+    except Exception as e:
+        print(e)
 
     await teardown(args)
 
@@ -114,34 +118,49 @@ async def request_task(args, q):
     data['host'] = args.host
 
     # Just run for a very long time...
-    await stress_requests_stream(1000000, 20, setup, teardown,
-                                 default_task, data)
+    await stress_requests_stream(default_task, data)
+
 
 async def command_handler(args, q):
-    global stop_requests
+    global stop_requests, gargs
     req_task = None
-    while True:
-        cmdline = await aioconsole.ainput('> ')
-        cmd, *cmdargs = re.split(r'\s+', cmdline.strip())
-        if cmd in ['exit', 'quit', 'q']:
-            break
-        if cmd == 'start':
-            if req_task is None:
-                req_task = asyncio.create_task(request_task(args, q))
-            else:
-                print("Request task already running.")
-        elif cmd == 'stop':
-            if req_task is not None:
-                req_task.cancel()
-                req_task = None
-            else:
-                print("Request task not running.")
+    try:
+        while not stop_requests:
+            cmdline = await aioconsole.ainput('> ')
+            cmd, *cmdargs = re.split(r'\s+', cmdline.strip())
+            if cmd in ['exit', 'quit', 'q']:
+                stop_event.set()
+                #break
+            elif cmd == 'start':
+                if req_task is None:
+                    req_task = asyncio.create_task(request_task(args, q))
+                else:
+                    print("Request task already running.")
+            elif cmd == 'stop':
+                if req_task is not None:
+                    req_task.cancel()
+                    req_task = None
+                else:
+                    print("Request task not running.")
+            elif cmd == 'show':
+                print(gargs)
+            elif cmd == 'set':
+                gargs[cmdargs[0]] = int(cmdargs[1])
+    except asyncio.CancelledError:
+        pass
     stop_requests = True
+    stop_event.set()
     if req_task is not None:
         req_task.cancel()
 
+event_loop = None
 async def amain(args, q):
-    await command_handler(args, q)
+    global event_loop
+    event_loop = asyncio.get_event_loop()
+    cmd_task = asyncio.create_task(command_handler(args, q))
+    await stop_event.wait()
+    cmd_task.cancel()
+
 
 
 def request_thread(args, q, plt):
@@ -155,6 +174,18 @@ n = 0
 t_prev = time.monotonic()
 q = DataQueue(maxsize=8192)
 
+
+close_flag = 0
+# to handle close event.
+def handle_close(evt):
+    global close_flag # should be global variable to change the outside close_flag.
+    close_flag = 1
+
+
+async def set_event(e):
+    e.set()
+
+
 def main(args):
     global stop_requests
 
@@ -163,7 +194,9 @@ def main(args):
 #    line, = ax.plot(x, y)
 #    plt.axis([0, 300, 0, args.yaxis])
 
+    plt.ion()
     figure = plt.figure('Transactional Throughput Stress Test', figsize=(4,3))
+    figure.canvas.mpl_connect('close_event', handle_close) # listen to close event
     ax = figure.add_subplot()
     ax.set_title('Throughput')
     ax.set_ylabel('Transactions/second')
@@ -173,7 +206,7 @@ def main(args):
     plt.axis([0, 300, 0, args.yaxis])
     ax.legend((line, line2), ('ok', 'nok'), loc='lower right', shadow=True)
 
-    def func_animate(i):
+    def func_animate():
         global x,y,y2,n,q,t_prev
         results = q.get()
         l = len(results)
@@ -200,22 +233,35 @@ def main(args):
         line2.set_data(x, y2)
 
         t_prev = t_now
-        return line,
-
-    ani = animation.FuncAnimation(figure,
-                        func_animate,
-                        frames=1,
-                        interval=1000)
 
 
     thread = Thread(target=request_thread, args=(args, q, plt))
     thread.start()
 
     try:
-        plt.show()
-        print('stopped')
+        t = time.monotonic()+2
+        while close_flag == 0:
+            # Update every two seconds
+            nt = time.monotonic()
+            if nt>t:
+                func_animate()
+                t = nt+2
+
+            #ax.relim() # recompute the axes limits.
+            #ax.autoscale_view() # update the axes limits.
+
+            figure.canvas.draw() # draw the figure
+            figure.canvas.flush_events() # flush the GUI events for the figure.
+            # plt.show(block=False)
+            time.sleep(0.1) # wait a little bit of time
+
+            if close_flag == 1:
+                break
     except KeyboardInterrupt:
         pass
+    if stop_requests == False:
+        asyncio.run_coroutine_threadsafe(set_event(stop_event), event_loop)
+    print('stopped')
     stop_requests = True
     sys.exit(0)
 
