@@ -20,10 +20,11 @@ import sys
 import time
 from threading import Thread
 
-import aioconsole
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 import numpy as np
+from prompt_toolkit.patch_stdout import patch_stdout
+from prompt_toolkit.shortcuts import PromptSession
 
 from stress_testing.stress_testing import setup, teardown, default_task, Parameters,\
                            SequenceRequest, RandomValue, single_request
@@ -100,7 +101,7 @@ async def stress_requests_stream(q, task, args):
 
 
 
-async def request_task(args, q):
+async def request_handler(args, q):
     parameters = Parameters({
         "id": SequenceRequest(0, wrap=1000),
         "data": RandomValue(0, 4000000000),
@@ -120,19 +121,21 @@ async def request_task(args, q):
     await stress_requests_stream(q, default_task, data)
 
 
-async def command_handler(args, q):
+async def command_handler(args, rq, cq):
     global close_flag, gargs
     req_task = None
+    session = PromptSession("stress-tests> ")
+
     try:
         while not close_flag:
-            cmdline = await aioconsole.ainput('> ')
+            cmdline = await session.prompt_async()
             try:
                 cmd, *cmdargs = re.split(r'\s+', cmdline.strip())
                 if cmd in ['exit', 'quit', 'q']:
                     break
                 elif cmd == 'start':
                     if req_task is None:
-                        req_task = asyncio.create_task(request_task(args, q))
+                        req_task = asyncio.create_task(request_handler(args, rq))
                     else:
                         print("Request task already running.")
                 elif cmd == 'stop':
@@ -146,10 +149,9 @@ async def command_handler(args, q):
                 elif cmd == 'set':
                     gargs[cmdargs[0]] = int(cmdargs[1])
                 elif cmd == 'zoom':
-                    maxy = int(max(max(y), max(y2))*1.2)
-                    if maxy == 0:
-                        maxy = 100
-                    plt.axis([0, 300, 0, maxy])
+                    c = {'cmd': 'zoomy'}
+                    cq.put(c)
+                    cq.join()
                 else:
                     print("Unknown command.")
             except KeyboardInterrupt as e:
@@ -165,10 +167,10 @@ async def command_handler(args, q):
 
 event_loop = None
 request_task = None
-async def amain(args, q):
+async def amain(args, rq, cq):
     global event_loop, request_task
     event_loop = asyncio.get_event_loop()
-    request_task = asyncio.create_task(command_handler(args, q))
+    request_task = asyncio.create_task(command_handler(args, rq, cq))
     await request_task
     request_task = None
 
@@ -177,8 +179,8 @@ async def stop_request_task():
     request_task.cancel()
 
 
-def request_loop(args, q):
-    asyncio.run(amain(args, q))
+def async_handler(args, rq, cq):
+    asyncio.run(amain(args, rq, cq))
 
 
 x = []
@@ -188,7 +190,7 @@ n = 0
 close_flag = 0
 
 
-def graph_loop(args, rq, cq):
+def graph_handler(args, rq, cq):
     global close_flag
     global x,y,y2,n
 
@@ -247,10 +249,22 @@ def graph_loop(args, rq, cq):
         if nt>t:
             func_animate()
             t = nt+2
-
-        figure.canvas.draw() # draw the figure
-        figure.canvas.flush_events() # flush the GUI events for the figure.
+            figure.canvas.draw() # draw the figure
         time.sleep(0.1) # wait a little bit of time
+
+        try:
+            c = cq.get(block=False)
+            if c['cmd'] == 'zoomy':
+                maxy = int(max(max(y), max(y2))*1.2)
+                if maxy == 0:
+                    maxy = 100
+                plt.axis([0, 300, 0, maxy])
+                figure.canvas.draw() # draw the figure
+            cq.task_done()
+        except queue.Empty:
+            pass
+
+        figure.canvas.flush_events() # flush the GUI events for the figure.
 
         if close_flag == 1:
             break
@@ -260,16 +274,13 @@ def main(args):
     global close_flag
 
     rq = DataQueue(maxsize=8192)
-    cq = queue.SimpleQueue()
+    cq = queue.Queue()
 
-    request_thread = Thread(target=request_loop, args=(args, rq))
-    request_thread.start()
-
-#    graph_thread = Thread(target=graph_loop, args=(args, rq, cq))
-#    graph_thread.start()
+    async_thread = Thread(target=async_handler, args=(args, rq, cq))
+    async_thread.start()
 
     try:
-        graph_loop(args, rq, cq)
+        graph_handler(args, rq, cq)
     except KeyboardInterrupt:
         pass
 
