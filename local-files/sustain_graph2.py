@@ -2,10 +2,14 @@
 # -*- mode: python; python-indent: 4 -*-
 
 # TODO:
-# - Command console
-# - Use python dict for json data
-# - Use new matplotlib event loop
-# - Dict to pass parameters to running transaction task?!
+# * Command console
+#  - Multiple tasks
+#  - History
+#  - Job handler
+#  - Unknown command
+# * Use python dict for json data
+# * Use new matplotlib event loop
+# * Dict to pass parameters to running transaction task?!
 
 
 import argparse
@@ -103,7 +107,7 @@ async def stress_requests_stream(task, args):
 
 async def request_task(args, q):
     parameters = Parameters({
-        "id": SequenceRequest(0, wrap=100),
+        "id": SequenceRequest(0, wrap=1000),
         "data": RandomValue(0, 4000000000),
     })
     data = {
@@ -127,25 +131,37 @@ async def command_handler(args, q):
     try:
         while not stop_requests:
             cmdline = await aioconsole.ainput('> ')
-            cmd, *cmdargs = re.split(r'\s+', cmdline.strip())
-            if cmd in ['exit', 'quit', 'q']:
-                stop_event.set()
-                #break
-            elif cmd == 'start':
-                if req_task is None:
-                    req_task = asyncio.create_task(request_task(args, q))
+            try:
+                cmd, *cmdargs = re.split(r'\s+', cmdline.strip())
+                if cmd in ['exit', 'quit', 'q']:
+                    stop_event.set()
+                    #break
+                elif cmd == 'start':
+                    if req_task is None:
+                        req_task = asyncio.create_task(request_task(args, q))
+                    else:
+                        print("Request task already running.")
+                elif cmd == 'stop':
+                    if req_task is not None:
+                        req_task.cancel()
+                        req_task = None
+                    else:
+                        print("Request task not running.")
+                elif cmd == 'show':
+                    print(gargs)
+                elif cmd == 'set':
+                    gargs[cmdargs[0]] = int(cmdargs[1])
+                elif cmd == 'zoom':
+                    maxy = int(max(max(y), max(y2))*1.2)
+                    if maxy == 0:
+                        maxy = 100
+                    plt.axis([0, 300, 0, maxy])
                 else:
-                    print("Request task already running.")
-            elif cmd == 'stop':
-                if req_task is not None:
-                    req_task.cancel()
-                    req_task = None
-                else:
-                    print("Request task not running.")
-            elif cmd == 'show':
-                print(gargs)
-            elif cmd == 'set':
-                gargs[cmdargs[0]] = int(cmdargs[1])
+                    print("Unknown command.")
+            except KeyboardInterrupt as e:
+                raise e
+            except Exception as e:
+                print(f"Error parsing command: {e}")
     except asyncio.CancelledError:
         pass
     stop_requests = True
@@ -189,17 +205,12 @@ async def set_event(e):
 def main(args):
     global stop_requests
 
-#    figure, ax = plt.subplots(figsize=(4,3))
-#    ax.set_title('Transactions per second')
-#    line, = ax.plot(x, y)
-#    plt.axis([0, 300, 0, args.yaxis])
-
     plt.ion()
     figure = plt.figure('Transactional Throughput Stress Test', figsize=(4,3))
     figure.canvas.mpl_connect('close_event', handle_close) # listen to close event
     ax = figure.add_subplot()
     ax.set_title('Throughput')
-    ax.set_ylabel('Transactions/second')
+    ax.set_ylabel('RESTCONF requests/second')
     ax.set_xlabel('Seconds')
     line, = ax.plot(x, y)
     line2, = ax.plot(x, y)
