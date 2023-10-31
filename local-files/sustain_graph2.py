@@ -6,9 +6,6 @@
 #  - Multiple tasks
 #  - History
 #  - Job handler
-#  - Unknown command
-# * Use python dict for json data
-# * Use new matplotlib event loop
 # * Dict to pass parameters to running transaction task?!
 
 
@@ -74,7 +71,7 @@ gargs = {
 }
 stop_requests = False
 stop_event = asyncio.Event()
-async def stress_requests_stream(task, args):
+async def stress_requests_stream(q, task, args):
     global stop_requests, gargs
     tasks = set()
 
@@ -122,7 +119,7 @@ async def request_task(args, q):
     data['host'] = args.host
 
     # Just run for a very long time...
-    await stress_requests_stream(default_task, data)
+    await stress_requests_stream(q, default_task, data)
 
 
 async def command_handler(args, q):
@@ -178,36 +175,31 @@ async def amain(args, q):
     cmd_task.cancel()
 
 
-
-def request_thread(args, q, plt):
+def request_loop(args, q):
     asyncio.run(amain(args, q))
-    plt.close()
+
 
 x = []
 y = []
 y2 = []
 n = 0
-t_prev = time.monotonic()
-q = DataQueue(maxsize=8192)
-
-
 close_flag = 0
-# to handle close event.
-def handle_close(evt):
-    global close_flag # should be global variable to change the outside close_flag.
-    close_flag = 1
 
 
 async def set_event(e):
     e.set()
 
 
-def main(args):
-    global stop_requests
+def graph_loop(args, rq, cq):
+    global stop_requests, close_flag
+    global x,y,y2,n
+
+    def handle_close(evt):
+        close_flag = 1
 
     plt.ion()
     figure = plt.figure('Transactional Throughput Stress Test', figsize=(4,3))
-    figure.canvas.mpl_connect('close_event', handle_close) # listen to close event
+    figure.canvas.mpl_connect('close_event', handle_close)
     ax = figure.add_subplot()
     ax.set_title('Throughput')
     ax.set_ylabel('RESTCONF requests/second')
@@ -217,9 +209,12 @@ def main(args):
     plt.axis([0, 300, 0, args.yaxis])
     ax.legend((line, line2), ('ok', 'nok'), loc='lower right', shadow=True)
 
+    t_prev = time.monotonic()
+
     def func_animate():
-        global x,y,y2,n,q,t_prev
-        results = q.get()
+        nonlocal t_prev
+        global n, x, y, y2
+        results = rq.get()
         l = len(results)
         ok = 0
         nok = 0
@@ -246,33 +241,43 @@ def main(args):
         t_prev = t_now
 
 
-    thread = Thread(target=request_thread, args=(args, q, plt))
-    thread.start()
+    t = time.monotonic()+2
+    while close_flag == 0:
+        # Update every two seconds
+        nt = time.monotonic()
+        if nt>t:
+            func_animate()
+            t = nt+2
+
+        figure.canvas.draw() # draw the figure
+        figure.canvas.flush_events() # flush the GUI events for the figure.
+        time.sleep(0.1) # wait a little bit of time
+
+        if close_flag == 1:
+            break
+
+
+def main(args):
+    global stop_requests
+
+    rq = DataQueue(maxsize=8192)
+    cq = queue.SimpleQueue()
+
+    request_thread = Thread(target=request_loop, args=(args, rq))
+    request_thread.start()
+
+#    graph_thread = Thread(target=graph_loop, args=(args, rq, cq))
+#    graph_thread.start()
 
     try:
-        t = time.monotonic()+2
-        while close_flag == 0:
-            # Update every two seconds
-            nt = time.monotonic()
-            if nt>t:
-                func_animate()
-                t = nt+2
-
-            #ax.relim() # recompute the axes limits.
-            #ax.autoscale_view() # update the axes limits.
-
-            figure.canvas.draw() # draw the figure
-            figure.canvas.flush_events() # flush the GUI events for the figure.
-            # plt.show(block=False)
-            time.sleep(0.1) # wait a little bit of time
-
-            if close_flag == 1:
-                break
+        graph_loop(args, rq, cq)
     except KeyboardInterrupt:
         pass
+
     if stop_requests == False:
         asyncio.run_coroutine_threadsafe(set_event(stop_event), event_loop)
     print('stopped')
+
     stop_requests = True
     sys.exit(0)
 
