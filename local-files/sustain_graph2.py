@@ -69,10 +69,8 @@ class DataQueue(queue.Queue):
 gargs = {
     'n_p': 20,
 }
-stop_requests = False
-stop_event = asyncio.Event()
 async def stress_requests_stream(q, task, args):
-    global stop_requests, gargs
+    global close_flag, gargs
     tasks = set()
 
     await setup(args)
@@ -82,7 +80,7 @@ async def stress_requests_stream(q, task, args):
         for _ in range(0, gargs['n_p']):
             tasks.add(asyncio.create_task(task(**args)))
 
-        while len(tasks)>0 and not stop_requests:
+        while len(tasks)>0 and not close_flag:
             done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
             for d in done:
                 result = await d
@@ -123,16 +121,15 @@ async def request_task(args, q):
 
 
 async def command_handler(args, q):
-    global stop_requests, gargs
+    global close_flag, gargs
     req_task = None
     try:
-        while not stop_requests:
+        while not close_flag:
             cmdline = await aioconsole.ainput('> ')
             try:
                 cmd, *cmdargs = re.split(r'\s+', cmdline.strip())
                 if cmd in ['exit', 'quit', 'q']:
-                    stop_event.set()
-                    #break
+                    break
                 elif cmd == 'start':
                     if req_task is None:
                         req_task = asyncio.create_task(request_task(args, q))
@@ -161,18 +158,23 @@ async def command_handler(args, q):
                 print(f"Error parsing command: {e}")
     except asyncio.CancelledError:
         pass
-    stop_requests = True
-    stop_event.set()
+    close_flag = 1
     if req_task is not None:
         req_task.cancel()
 
+
 event_loop = None
+request_task = None
 async def amain(args, q):
-    global event_loop
+    global event_loop, request_task
     event_loop = asyncio.get_event_loop()
-    cmd_task = asyncio.create_task(command_handler(args, q))
-    await stop_event.wait()
-    cmd_task.cancel()
+    request_task = asyncio.create_task(command_handler(args, q))
+    await request_task
+    request_task = None
+
+
+async def stop_request_task():
+    request_task.cancel()
 
 
 def request_loop(args, q):
@@ -186,15 +188,12 @@ n = 0
 close_flag = 0
 
 
-async def set_event(e):
-    e.set()
-
-
 def graph_loop(args, rq, cq):
-    global stop_requests, close_flag
+    global close_flag
     global x,y,y2,n
 
     def handle_close(evt):
+        global close_flag
         close_flag = 1
 
     plt.ion()
@@ -258,7 +257,7 @@ def graph_loop(args, rq, cq):
 
 
 def main(args):
-    global stop_requests
+    global close_flag
 
     rq = DataQueue(maxsize=8192)
     cq = queue.SimpleQueue()
@@ -274,11 +273,11 @@ def main(args):
     except KeyboardInterrupt:
         pass
 
-    if stop_requests == False:
-        asyncio.run_coroutine_threadsafe(set_event(stop_event), event_loop)
+    if request_task:
+        asyncio.run_coroutine_threadsafe(stop_request_task(), event_loop)
     print('stopped')
 
-    stop_requests = True
+    close_flag = 1
     sys.exit(0)
 
 if __name__ == '__main__':
