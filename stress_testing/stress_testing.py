@@ -7,6 +7,7 @@ import copy
 import json
 import pprint as pp
 import random
+import re
 import time
 from xmlrpc.client import boolean
 
@@ -250,10 +251,13 @@ async def setup_task(client, host):
     elapsed = time.monotonic()-st
     return (*resp, elapsed)
 
+
+re_sub = re.compile(r'<<(\w+)>>')
+
 async def default_task(client=None, parameters=Parameters(), host='', op='',
                        url='', data='', resource_type='data', params=None):
-    url = url.format_map(parameters)
-    data = data.format_map(parameters)
+    url = re_sub.sub(lambda m: str(parameters[m.group(1)]), url)
+    data = re_sub.sub(lambda m: str(parameters[m.group(1)]), data)
     parameters.update_request()
     st = time.monotonic()
     resp = await restconf_request(client,
@@ -389,7 +393,11 @@ def run_tests(which, args, tests, n, max_p, task=None, do_print=False):
             else:
                 params = {}
             name = info['name'].format_map(params)
+            if args.highlight:
+                print(ansi.BOLD, end='')
             print(f'==== {name} ====')
+            if args.highlight:
+                print(ansi.RST, end='')
             print()
 
     results = []

@@ -4,7 +4,6 @@
 # TODO:
 # * Command console
 #  - Multiple tasks
-#  - History
 #  - Job handler
 # * Dict to pass parameters to running transaction task?!
 
@@ -25,6 +24,7 @@ import matplotlib.animation as animation
 import numpy as np
 from prompt_toolkit.patch_stdout import patch_stdout
 from prompt_toolkit.shortcuts import PromptSession
+from prompt_toolkit.history import FileHistory
 
 from stress_testing.stress_testing import setup, teardown, default_task, Parameters,\
                            SequenceRequest, RandomValue, single_request
@@ -69,7 +69,9 @@ class DataQueue(queue.Queue):
 
 gargs = {
     'n_p': 20,
+    'delay': 5000,
 }
+# TODO: Rename function, like sliding_window ...
 async def stress_requests_stream(q, task, args):
     global close_flag, gargs
     tasks = set()
@@ -77,6 +79,7 @@ async def stress_requests_stream(q, task, args):
     await setup(args)
 
     try:
+        # TODO: Cleanup function, more readable
         # Start initial n_p tasks
         for _ in range(0, gargs['n_p']):
             tasks.add(asyncio.create_task(task(**args)))
@@ -85,6 +88,7 @@ async def stress_requests_stream(q, task, args):
             done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
             for d in done:
                 result = await d
+                # Push results to graph_handler
                 q.put(result)
             # Start new tasks, but no more than n_p in total.
             tasks_to_start = gargs['n_p']-len(pending)  # Calculate number of free task slots
@@ -101,30 +105,82 @@ async def stress_requests_stream(q, task, args):
 
 
 
-async def request_handler(args, q):
+async def job_model_a(args, rq):
     parameters = Parameters({
         "id": SequenceRequest(0, wrap=1000),
         "data": RandomValue(0, 4000000000),
     })
+    parameters.update(gargs)
     data = {
-            'op': 'update', 'url': '/model-a:model-a/model-a:list=K{id}',
-            'data': '''{{
-                        "list":{{
-                            "str-value":"Changed string data {data}"
-                        }}
-                    }}''',
-            'parameters': parameters
+        'host': args.host,
+        'op': 'update',
+        'url': '/model-a:model-a/model-a:list=K<<id>>',
+        'data': '''{
+                    "list":{
+                        "str-value":"Changed string data <<data>>"
+                    }
+                }''',
+        'parameters': parameters
     }
-    data['host'] = args.host
 
     # Just run for a very long time...
-    await stress_requests_stream(q, default_task, data)
+    await stress_requests_stream(rq, default_task, data)
 
+
+async def job_python_service_create(args, rq):
+    parameters = Parameters({
+        "id": SequenceRequest(0),
+        "data": RandomValue(0, 4000000000),
+        "delay": 0
+    })
+    parameters.update(gargs)
+    data = {
+        'host': args.host,
+        'op': 'create',
+        'url': '/python-service:python-service',
+        'data': '''{
+                    "service":{
+                        "name":"K<<id>>",
+                        "delay":<<delay>>,
+                        "str-value":"String data <<id>>"
+                    }
+                }''',
+        'parameters': parameters
+    }
+
+    # Just run for a very long time...
+    await stress_requests_stream(rq, default_task, data)
+
+
+async def job_python_service_delete(args, rq):
+    parameters = Parameters({
+        "id": SequenceRequest(0)
+    })
+    data = {
+        'host': args.host,
+        'op': 'delete',
+        'url': '/python-service:python-service/python-service:service=K<<id>>',
+        'parameters': parameters
+    }
+
+    # Just run for a very long time...
+    await stress_requests_stream(rq, default_task, data)
+
+
+jobs = {
+    'model_a': job_model_a,
+    'python_service_create': job_python_service_create,
+    'python_service_delete': job_python_service_delete,
+    'python_service_update': None, #job_model_update_python_service,
+}
+
+running_jobs = {}
 
 async def command_handler(args, rq, cq):
     global close_flag, gargs
     req_task = None
-    session = PromptSession("stress-tests> ")
+    cmd_history = FileHistory(".sustain_graph")
+    session = PromptSession("stress-tests> ", history=cmd_history)
 
     try:
         while not close_flag:
@@ -133,19 +189,49 @@ async def command_handler(args, rq, cq):
                 cmd, *cmdargs = re.split(r'\s+', cmdline.strip())
                 if cmd in ['exit', 'quit', 'q']:
                     break
+                elif cmd in ['h', 'help']:
+                    print('Available commands:')
+                    print('quit, q')
+                    print('help, h')
+                    print('start')
+                    print('stop')
+                    print('jobs')
+                    print('show')
+                    print('set')
+                    print('zoom')
+
                 elif cmd == 'start':
-                    if req_task is None:
-                        req_task = asyncio.create_task(request_handler(args, rq))
+                    if not cmdargs:
+                        print("Available jobs:")
+                        for name in jobs:
+                            print(f'- {name}')
+                    elif cmdargs[0] not in jobs:
+                        print('Invalid job name.')
+                    elif cmdargs[0] in running_jobs:
+                        print('Job is already running.')
                     else:
-                        print("Request task already running.")
+                        co = jobs[cmdargs[0]]
+                        running_jobs[cmdargs[0]] = asyncio.create_task(co(args,
+                                                                          rq))
                 elif cmd == 'stop':
-                    if req_task is not None:
-                        req_task.cancel()
-                        req_task = None
+                    if cmdargs[0] not in jobs:
+                        print('Invalid job name.')
+                    elif cmdargs[0] not in running_jobs:
+                        print('Job is not running.')
                     else:
-                        print("Request task not running.")
+                        task = running_jobs[cmdargs[0]]
+                        task.cancel()
+                        del running_jobs[cmdargs[0]]
+                elif cmd == 'jobs':
+                    if running_jobs:
+                        print('Running jobs:')
+                        for name in running_jobs.keys():
+                            print(f'- {name}')
+                    else:
+                        print("No running jobs.")
                 elif cmd == 'show':
-                    print(gargs)
+                    for k,v in gargs.items():
+                        print(f'{k}: {v}')
                 elif cmd == 'set':
                     gargs[cmdargs[0]] = int(cmdargs[1])
                 elif cmd == 'zoom':
@@ -158,6 +244,8 @@ async def command_handler(args, rq, cq):
                 raise e
             except Exception as e:
                 print(f"Error parsing command: {e}")
+    except KeyboardInterrupt:
+        pass
     except asyncio.CancelledError:
         pass
     close_flag = 1
