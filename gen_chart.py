@@ -5,10 +5,6 @@
 TODO:
  - argParse
    - title
- - Generic CRUDChart function.
- - Chart for avg. rate 
- - Chart for avg. request time
- - Chart for each detail level
 
 """
 
@@ -37,14 +33,51 @@ HEADER = """
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>${TITLE}</title>
     <!--Chart.js JS CDN-->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.9.4/Chart.min.js"></script>
-  </head>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.js"></script>
+</head>
   <body>
     <h1>${TAG}${TITLE}</h1>
     <script>
-      function CRUDChart(ctx, labels, data) {
+      function MyChart(ctx, title, yt, xt, labels, data) {
         var myChart = new Chart(ctx, {
           type: 'line',
+          options: {
+            layout: {
+                padding: 0
+            },
+            plugins: {
+              title: {
+                display: true,
+                align: 'center',
+                font: {
+                  size: 40
+                },
+                text: title
+              },
+            },
+            scales: {
+              x: {
+                display: true,
+                title: {
+                  display: true,
+                  font: {
+                    size: 25
+                  },
+                  text: xt
+                }
+              },
+              y: {
+                display: true,
+                title: {
+                  display: true,
+                  font: {
+                    size: 25
+                  },
+                  text: yt
+                }
+              }
+            }
+          },
           data: {
             labels: labels,
             datasets: [{
@@ -80,20 +113,35 @@ HEADER = """
           },
         });
       }
-      function CRUDChartDetails(ctx, data) {
+      function CRUDChartThroughput(title, labels, data) {
+        ctx = addChart();
+        return new MyChart(ctx, title,
+                       'Requests per second', 'Concurrent requests',
+                       labels, data)
+      }
+      function CRUDChartTime(title, labels, data) {
+        ctx = addChart();
+        return new MyChart(ctx, title,
+                       'Request time seconds', 'Concurrent requests',
+                       labels, data)
+      }
+      function DetailsChart(title, data) {
+        ctx = addChart();
         var labels = [];
         for (let i = 0; i < data['create'].length; i++) {
           labels.push(i);
         }
-        return new CRUDChart(ctx, labels, data)
+        return new MyChart(ctx, title,
+                       'Request time in seconds', 'Request id',
+                       labels, data)
       }
-      function addChart(title) {
+      function addChart() {
         const canvas = document.createElement('canvas');
-        const t = document.createElement("h2");
-        t.innerHTML = title;
         const charts = document.getElementById('charts');
-        charts.appendChild(t);
         charts.appendChild(canvas);
+        const div = document.createElement('div');
+        div.style.height = '200px';
+        charts.appendChild(div);
         return canvas.getContext('2d');
       }
     </script>
@@ -110,17 +158,23 @@ FOOTER = """
   </body> </html>
 """
 
-def addSummaryChart(f, title, data):
+def addThroughputChart(f, title, data):
     f.write('var data =')
     f.write(json.dumps(data))
     f.write(';')
-    f.write(f'CRUDChart(addChart("{title}"), labels, data);')
+    f.write(f'CRUDChartThroughput("{title}", labels, data);')
+
+def addTimeChart(f, title, data):
+    f.write('var data =')
+    f.write(json.dumps(data))
+    f.write(';')
+    f.write(f'CRUDChartTime("{title}", labels, data);')
 
 def addDetailedChart(f, title, data):
     f.write('var data =')
     f.write(json.dumps(data))
     f.write(';')
-    f.write(f'CRUDChartDetails(addChart("{title}"), data);')
+    f.write(f'DetailsChart("{title}", data);')
 
 
 # Get a dict from a dict. Add if not found
@@ -177,10 +231,10 @@ def generate_html(args, name, oname):
     of.write('var labels =')
     of.write(json.dumps(summary_labels))
     of.write(';')
-    addSummaryChart(of, 'Transactional throughput with parallel requests', summary_rate)
-    addSummaryChart(of, 'Average request time with parallel requests', summary_avg)
+    addThroughputChart(of, 'Requests throughput with concurrent requests', summary_rate)
+    addTimeChart(of, 'Average request time with parallel requests', summary_avg)
     for p, details in total_details.items():
-        addDetailedChart(of, f"Time for each request - {p} parallel requests", details)
+        addDetailedChart(of, f"Individual request time with {p} concurrent requests", details)
     of.write(FOOTER)
 
 data = {}
