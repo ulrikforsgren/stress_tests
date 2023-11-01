@@ -132,7 +132,7 @@ HEADER = """
           labels.push(i);
         }
         return new MyChart(ctx, title,
-                       'Request time in seconds', 'Request id',
+                       'Request time in seconds', 'Request completion order',
                        labels, data)
       }
       function addChart() {
