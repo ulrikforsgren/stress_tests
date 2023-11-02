@@ -1,5 +1,13 @@
 #!/usr/bin/env python
 # -*- coding: utf-8; mode: python; python-indent: 4 -*-
+def printt(string):
+    width=20
+    string = str(string).strip()
+    if len(string) > width:
+        string = string[:width-3].strip() + '...'
+    print(string)
+
+
 
 import requests
 import time
