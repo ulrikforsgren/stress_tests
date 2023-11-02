@@ -156,49 +156,51 @@ def main(args):
     plt.axis([0, 300, 0, args.yaxis])
     ax.legend((line, line2), ('ok', 'nok'), loc='lower right', shadow=True)
 
-    def func_animate(i):
-        global x,y,y2,n,q,t_prev
-        results = q.get()
-        l = len(results)
-        ok = 0
-        nok = 0
-        for r in results:
-            if r[1] == 'ok':
-                ok +=1
-            else:
-                nok +=1
-        t_now = time.monotonic()
-        elapsed = t_now-t_prev
-        y += [ok/elapsed]
-        y2 += [nok/elapsed]
-        n += 1
-
-        if len(y)<=300:
-            x += [n]
-        else:
-            y.pop(0)
-            y2.pop(0)
-
-        line.set_data(x, y)
-        line2.set_data(x, y2)
-
-        t_prev = t_now
-        return line,
-
-    ani = animation.FuncAnimation(figure,
-                        func_animate,
-                        frames=1,
-                        interval=1000)
-
-
-    thread = Thread(target=request_thread, args=(args, q, plt))
-    thread.start()
-
     try:
-        plt.show(block=False)
+        def func_animate(i):
+            global x,y,y2,n,q,t_prev
+            results = q.get()
+            l = len(results)
+            ok = 0
+            nok = 0
+            for r in results:
+                if r[1] == 'ok':
+                    ok +=1
+                else:
+                    nok +=1
+            t_now = time.monotonic()
+            elapsed = t_now-t_prev
+            y += [ok/elapsed]
+            y2 += [nok/elapsed]
+            n += 1
+
+            if len(y)<=300:
+                x += [n]
+            else:
+                y.pop(0)
+                y2.pop(0)
+
+            line.set_data(x, y)
+            line2.set_data(x, y2)
+
+            t_prev = t_now
+            return line,
+
+        ani = animation.FuncAnimation(figure,
+                            func_animate,
+                            frames=1,
+                            interval=1000)
+
+
+        thread = Thread(target=request_thread, args=(args, q, plt))
+        thread.start()
+
+        plt.show()
         print('stopped')
     except KeyboardInterrupt:
         pass
+    except Exception as e:
+        print(e)
     stop_requests = True
     sys.exit(0)
 
