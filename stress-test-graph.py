@@ -10,6 +10,7 @@
 
 import argparse
 import asyncio
+from datetime import datetime
 import io
 import queue
 import random
@@ -23,8 +24,9 @@ import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 import numpy as np
 from prompt_toolkit.patch_stdout import patch_stdout
-from prompt_toolkit.shortcuts import PromptSession
+from prompt_toolkit.shortcuts import PromptSession, CompleteStyle
 from prompt_toolkit.history import FileHistory
+from prompt_toolkit.completion import Completer, Completion, NestedCompleter
 
 from stress_testing.stress_testing import setup, teardown, default_task, Parameters,\
                            SequenceRequest, RandomValue, single_request
@@ -71,9 +73,11 @@ gargs = {
     'n_p': 20,
     'delay': 5000,
 }
+last_result = None
+last_error = None
 # TODO: Rename function, like sliding_window ...
 async def stress_requests_stream(q, task, args):
-    global close_flag, gargs
+    global close_flag, gargs, last_result, last_error
     tasks = set()
 
     await setup(args)
@@ -88,6 +92,9 @@ async def stress_requests_stream(q, task, args):
             done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
             for d in done:
                 result = await d
+                last_result = (datetime.now().isoformat(), result)
+                if result[1] != 'ok':
+                    last_error = last_result
                 # Push results to graph_handler
                 q.put(result)
             # Start new tasks, but no more than n_p in total.
@@ -176,15 +183,42 @@ jobs = {
 
 running_jobs = {}
 
+class DictKeyCompleter(Completer):
+    def __init__(self, d):
+        self.d = d
+    def get_completions(self, document, complete_event):
+        word = document.get_word_before_cursor()
+        for k in self.d.keys():
+            if k.startswith(word):
+                yield Completion(k, start_position=-len(word))
+
+
+completer = NestedCompleter.from_nested_dict(
+    {
+        "start": set(jobs),
+        "stop": DictKeyCompleter(running_jobs),
+        "exit": None,
+        "show": None,
+        "set": {"n_p", "delay"},
+        "show": None,
+        "jobs": None,
+        "last": None,
+        "zoom": None,
+        "clear": None,
+        "help": None,
+    }
+)
+
 async def command_handler(args, rq, cq):
     global close_flag, gargs
     req_task = None
     cmd_history = FileHistory(".sustain_graph")
     session = PromptSession("stress-tests> ", history=cmd_history)
-
     try:
         while not close_flag:
-            cmdline = await session.prompt_async()
+            cmdline = await session.prompt_async(
+                    completer=completer,
+                    complete_style=CompleteStyle.READLINE_LIKE)
             try:
                 cmd, *cmdargs = re.split(r'\s+', cmdline.strip())
                 if cmd in ['exit', 'quit', 'q']:
@@ -199,6 +233,8 @@ async def command_handler(args, rq, cq):
                     print('show')
                     print('set')
                     print('zoom')
+                    print('clear')
+                    print('last')
 
                 elif cmd == 'start':
                     if not cmdargs:
@@ -235,9 +271,16 @@ async def command_handler(args, rq, cq):
                 elif cmd == 'set':
                     gargs[cmdargs[0]] = int(cmdargs[1])
                 elif cmd == 'zoom':
-                    c = {'cmd': 'zoomy'}
+                    c = {'cmd': 'zoom'}
                     cq.put(c)
                     cq.join()
+                elif cmd == 'clear':
+                    c = {'cmd': 'clear'}
+                    cq.put(c)
+                    cq.join()
+                elif cmd == 'last':
+                    print('result:', last_result)
+                    print('error:', last_error)
                 else:
                     print("Unknown command.")
             except KeyboardInterrupt as e:
@@ -290,8 +333,8 @@ def graph_handler(args, rq, cq):
     figure = plt.figure('Transactional Throughput Stress Test', figsize=(4,3))
     figure.canvas.mpl_connect('close_event', handle_close)
     ax = figure.add_subplot()
-    ax.set_title('Throughput')
-    ax.set_ylabel('RESTCONF requests/second')
+    ax.set_title('RESTCONF requests throughput')
+    ax.set_ylabel('Requests/second')
     ax.set_xlabel('Seconds')
     line, = ax.plot(x, y)
     line2, = ax.plot(x, y)
@@ -342,12 +385,17 @@ def graph_handler(args, rq, cq):
 
         try:
             c = cq.get(block=False)
-            if c['cmd'] == 'zoomy':
+            if c['cmd'] == 'zoom':
                 maxy = int(max(max(y), max(y2))*1.2)
                 if maxy == 0:
                     maxy = 100
                 plt.axis([0, 300, 0, maxy])
                 figure.canvas.draw() # draw the figure
+            elif c['cmd'] == 'clear':
+                x = []
+                y = []
+                y2 = []
+                n = 0
             cq.task_done()
         except queue.Empty:
             pass
