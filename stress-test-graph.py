@@ -76,16 +76,15 @@ last_result = None
 last_error = None
 
 
-async def sliding_window_executor(q, task_function, intent):
-    global close_flag, global_parameters, last_result, last_error
-    tasks = set()
-
-    await setup(intent)
-
+async def sliding_window_executor(q, task_function, data):
+    global close_flag, last_result, last_error
+    await setup(data)
     try:
+        tasks = set()
+
         # Start initial n_p number of tasks
-        for _ in range(0, global_parameters['n_p']):
-            tasks.add(asyncio.create_task(task_function(**intent)))
+        for _ in range(0, data['parameters']['n_p']):
+            tasks.add(asyncio.create_task(task_function(**data)))
 
         while not close_flag:
             done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
@@ -97,18 +96,19 @@ async def sliding_window_executor(q, task_function, intent):
                 # Push results to graph_handler
                 q.put(result)
             # Start new tasks to keep a total of n_p number of tasks running.
-            tasks_to_start = global_parameters['n_p']-len(pending)  # Calculate number of free task slots
+            tasks_to_start = data['parameters']['n_p']-len(pending)  # Calculate number of free task slots
             if tasks_to_start>0:
                 # Start tasks in available slots
                 for _ in range(0, tasks_to_start):
-                    pending.add(asyncio.create_task(task_function(**intent)))
+                    pending.add(asyncio.create_task(task_function(**data)))
             tasks = pending
     except asyncio.CancelledError:
-        pass
-    except Exception as e:
+        for t in tasks:
+            t.cancel()
+    except:
         print(e)
-
-    await teardown(intent)
+    finally:
+        await teardown(data)
 
 
 async def default_task2(client=None, parameters=Parameters(), host='', op='',
@@ -143,11 +143,10 @@ global_parameters = {
 
 
 async def job_model_a(args, ctx, rq):
-    parameters = Parameters({
+    ctx.update({
         "id": SequenceRequest(0, wrap=1000),
         "data": RandomValue(0, 4000000000),
     })
-    parameters.update(ctx)
     data = {
         'host': args.host,
         'op': 'update',
@@ -157,18 +156,17 @@ async def job_model_a(args, ctx, rq):
                         "str-value": "Changed string data <<data>>"
                     }
                 }''',
-        'parameters': parameters
+        'parameters': ctx
     }
     await sliding_window_executor(rq, default_task, data)
 
 
 async def job_python_service_create(args, ctx, rq):
-    parameters = Parameters({
+    ctx.update({
         "id": SequenceRequest(0),
         "data": RandomValue(0, 4000000000),
         "delay": 0
     })
-    parameters.update(ctx)
     data = {
         'host': args.host,
         'op': 'create',
@@ -180,19 +178,18 @@ async def job_python_service_create(args, ctx, rq):
                         "str-value": "String data <<id>>"
                     }
                 }''',
-        'parameters': parameters
+        'parameters': ctx
     }
     await sliding_window_executor(rq, default_task, data)
 
 
 async def job_python_service_list_create(args, ctx, rq):
-    parameters = Parameters({
+    ctx.update({
         "id": SequenceRequest(0),
         "data": RandomValue(0, 4000000000),
         "delay": 0,
         "numvlan": 100
     })
-    parameters.update(ctx)
     data = {
         'host': args.host,
         'op': 'create',
@@ -207,21 +204,20 @@ async def job_python_service_list_create(args, ctx, rq):
                         "str-value": "String-<<id>>"
                     }
                 }''',
-        'parameters': parameters
+        'parameters': ctx
     }
     await sliding_window_executor(rq, default_task, data)
 
 
 async def job_python_service_delete(args, ctx, rq):
-    parameters = Parameters({
+    ctx.update({
         "id": SequenceRequest(0)
     })
-    parameters.update(ctx)
     data = {
         'host': args.host,
         'op': 'delete',
         'url': '/python-service:python-service/python-service:service=K<<id>>',
-        'parameters': parameters
+        'parameters': ctx
     }
     await sliding_window_executor(rq, default_task, data)
 
@@ -236,7 +232,7 @@ jobs = {
 
 
 #############################################################################
-#  COMMAND PROMPT
+#  COMMAND PROMPT HANDLER
 #############################################################################
 
 # Dictionary  str -> (coroutine, dict)
@@ -256,8 +252,14 @@ commands = {
         "start": (set(jobs), "Start a named job."),
         "stop": (DictKeyCompleter(running_jobs), "Stop named jobs."),
         "exit": (None, "Exit program."),
-        "show": (None, "Show job parameters."),
-        "set": ({"n_p", "delay"}, "Set a job parameter."),
+        "show": ({
+            'global': None,
+            'job': DictKeyCompleter(running_jobs)
+            }, "Show job parameters."),
+        "set": ({
+            'global': None,
+            'job': DictKeyCompleter(running_jobs)
+            }, "Set job parameters."),
         "jobs": (None, "Show running jobs."),
         "last": (None, "Show last request result and error."),
         "zoom": (None, "Zoom graph."),
@@ -275,13 +277,13 @@ async def command_handler(args, rq, cq):
     global close_flag, global_parameters
     req_task = None
     cmd_history = FileHistory(".stress_test_graph")
-    session = PromptSession("stress-test> ", history=cmd_history)
+    session = PromptSession("benchmarking-nso> ", history=cmd_history)
     try:
-        while not close_flag:
-            cmdline = await session.prompt_async(
-                    completer=completer)#,
-                    #complete_style=CompleteStyle.READLINE_LIKE)
-            try:
+        try:
+            while not close_flag:
+                cmdline = await session.prompt_async(
+                                    completer=completer)#,
+                                    #complete_style=CompleteStyle.READLINE_LIKE)
                 cmd, *cmdargs = re.split(r'\s+', cmdline.strip())
                 if cmd in ['exit', 'quit', 'q']:
                     break
@@ -301,7 +303,7 @@ async def command_handler(args, rq, cq):
                         print('Job is already running.')
                     else:
                         co = jobs[cmdargs[0]]
-                        ctx = global_parameters.copy()
+                        ctx = Parameters(global_parameters)
                         running_jobs[cmdargs[0]] = {
                                 'task': asyncio.create_task(co(args, ctx, rq)),
                                 'ctx': ctx
@@ -323,10 +325,26 @@ async def command_handler(args, rq, cq):
                     else:
                         print("No running jobs.")
                 elif cmd == 'show':
-                    for k,v in global_parameters.items():
-                        print(f'{k}: {v}')
+                    if cmdargs[0] == 'global':
+                        for k,v in global_parameters.items():
+                            print(f'{k}: {v}')
+                    elif cmdargs[0] == 'job':
+                        if cmdargs[1] in jobs:
+                            for k,v in running_jobs[cmdargs[1]]['ctx'].items():
+                                print(f'{k}:', v)
+                        else:
+                            print('Invalid job name.')
+                    else:
+                        print('Invalid argument.')
                 elif cmd == 'set':
-                    global_parameters[cmdargs[0]] = int(cmdargs[1])
+                    if cmdargs[0] == 'global':
+                        # TODO: Handle other datatypes than int
+                        global_parameters[cmdargs[1]] = int(cmdargs[2])
+                    elif cmdargs[0] == 'job':
+                        if cmdargs[1] in jobs:
+                            running_jobs[cmdargs[1]]['ctx'][cmdargs[2]] = int(cmdargs[3])
+                        else:
+                            print('Invalid job name.')
                 elif cmd == 'zoom':
                     c = {'cmd': 'zoom'}
                     cq.put(c)
@@ -340,10 +358,14 @@ async def command_handler(args, rq, cq):
                     print('error:', last_error)
                 else:
                     print("Unknown command.")
-            except KeyboardInterrupt as e:
-                raise e
-            except Exception as e:
-                print(f"Error parsing command: {e}")
+        except KeyboardInterrupt as e:
+            raise e
+        except Exception as e:
+            print(f"Error parsing command: {e}")
+        except BaseException as e:
+            print(f"Error parsing command: {e}")
+        finally:
+            print("Exiting...", flush=True)
     except KeyboardInterrupt:
         pass
     except asyncio.CancelledError:
@@ -358,6 +380,7 @@ request_task = None
 async def amain(args, rq, cq):
     global event_loop, request_task
     event_loop = asyncio.get_event_loop()
+    #event_loop.set_exception_handler(exception_handler)
     request_task = asyncio.create_task(command_handler(args, rq, cq))
     await request_task
     request_task = None
