@@ -32,35 +32,35 @@ CRUD_TESTS = {
         {
             'op': 'create',
             'url': '/model-a:model-a',
-            'data': '''{{
-                        "list":{{
-                            "name":"K{id}",
-                            "str-value":"String data {id}"
-                        }}
-                    }}''',
+            'data': '''{
+                        "list":{
+                            "name":"K<<id>>",
+                            "str-value":"String data <<id>>"
+                        }
+                    }''',
             'parameters': parameters
         },
     'read':
         {
             'op': 'read',
-            'url': '/model-a:model-a/model-a:list=K{id}',
+            'url': '/model-a:model-a/model-a:list=K<<id>>',
             'parameters': parameters
         },
     'update':
         {
             'op': 'update',
-            'url': '/model-a:model-a/model-a:list=K{id}',
-            'data': '''{{
-                        "list":{{
-                            "str-value":"Changed string data {data}"
-                        }}
-                    }}''',
+            'url': '/model-a:model-a/model-a:list=K<<id>>',
+            'data': '''{
+                        "list":{
+                            "str-value":"Changed string data <<data>>"
+                        }
+                    }''',
             'parameters': parameters
         },
     'delete':
         {
             'op': 'delete',
-            'url': '/model-a:model-a/model-a:list=K{id}',
+            'url': '/model-a:model-a/model-a:list=K<<id>>',
             'parameters': parameters
         }
 }
