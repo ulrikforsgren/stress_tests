@@ -23,6 +23,8 @@ class ansi:
     BOLD =      '\033[1m'
     DIM =       '\033[2m'
     UNDERLINE = '\033[4m'
+    REVERSE =   '\033[7m'
+    NREVERSE =  '\033[27m'
     PINK =      '\033[95m'
     BLUE =      '\033[94m'
     GREEN =     '\033[92m'
@@ -97,6 +99,10 @@ class Sequence:
         pass
     def __copy__(self):
         return self.__class__(self.n)
+    def reset(self):
+        self.n = 0
+    def current(self):
+        return self.n
 
 
 class SequenceRequest(Sequence):
@@ -110,6 +116,7 @@ class SequenceRequest(Sequence):
         if self.wrap is not None:
             self.n = self.n % self.wrap
 
+
 class SequenceBatch(Sequence):
     def __init__(self, n):
         super(SequenceBatch, self).__init__(n)
@@ -118,6 +125,7 @@ class SequenceBatch(Sequence):
     def update_batch(self):
         self.n += 1
 
+
 class RandomValue(Sequence):
     def __init__(self, lower, upper):
         super(RandomValue, self).__init__(0)
@@ -125,17 +133,17 @@ class RandomValue(Sequence):
         self.upper = upper
     def __str__(self):
         return str(random.randint(self.lower, self.upper))
+    def current(self):
+        return f'random value in range {self.lower}..{self.upper}'
 
-# class Parameters makes it possible provide parameters in the form of {x} in
-# url and data strings.
+
 """
- The use of format_map is neat, but makes it harder to provide data as
- a dict and convert to json, as it is a teadious work escape curly braces.
- The escaping also makes it harder to see if the json is correctly formatted.
+class Parameters makes it possible provide parameters in the form of <<x>> in
+url and data strings.
 """
 class Parameters(dict):
     def __missing__(self, key):
-        return "{" + key + "}"
+        return "<<" + key + ">>"
     def update_request(self):
         for v in self.values():
             if isinstance(v, Sequence):
@@ -156,6 +164,10 @@ class Parameters(dict):
                 self.update({k: v})
         else:
             raise TypeError(f'Invalid type: {type(cmd_p)}')
+    def reset(self):
+        for v in self.values():
+            if isinstance(v, Sequence):
+                v.reset()
 
 
 def number_of_open_connections(conn):
@@ -166,6 +178,8 @@ def number_of_open_connections(conn):
         return 0
 
 async def setup_connections(n_p, client, host):
+    # Run n_p tasks in parallel to force client to setup n_p connections
+    # This to remove the initial connection time from the results
     tasks = [ asyncio.create_task(setup_task(client, host))
               for p in range(0,n_p) ]
     await asyncio.gather(*tasks)
@@ -241,6 +255,7 @@ async def single_request(args, setup=setup, teardown=teardown):
     return result
 
 async def setup_task(client, host):
+    # Reading an arbitrary leaf to force the client to setup a connection.
     url = '/tailf-ncs:devices/global-settings/read-timeout'
     op = 'read'
     st = time.monotonic()
@@ -349,7 +364,7 @@ def run_test_in_subprocess(args, func, n, n_p, req, task=None, do_print=False):
     if count:
         average=total/count
     else:
-        average = -1
+        average = -1.0
     if do_print:
         op = req['op'].upper()
         print(f'{op:<6} {count:>5} {n_p:>3} {elapsed:>5.1f} {count/elapsed:>6.1f} {average:>6.3f} {count_wrong:>5} {count_exc:>5}', flush=True)
@@ -395,6 +410,7 @@ def run_tests(which, args, tests, n, max_p, task=None, do_print=False):
             name = info['name'].format_map(params)
             if args.highlight:
                 print(ansi.BOLD, end='')
+                print(ansi.REVERSE, end='')
             print(f'==== {name} ====')
             if args.highlight:
                 print(ansi.RST, end='')
@@ -406,7 +422,8 @@ def run_tests(which, args, tests, n, max_p, task=None, do_print=False):
         for op in which:
             req = tests[op]
             req['host'] = args.host
-            req['parameters'].update_cmdline(args.p)
+            if 'parameters' in req:
+                req['parameters'].update_cmdline(args.p)
             results.append((op, n, n_p, run_test_in_subprocess(args, do_test, n, n_p, req, task, do_print)))
         if args.highlight and r%2 == 1: print(ansi.RST, end='')
     if args.json:

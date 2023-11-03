@@ -38,15 +38,15 @@ async def setup_pool_connections(self, conn, host, n_p):
     conn._conns[key] = connections
 
 
-async def setup(args):
+async def setup(ctx):
     aiohttp.TCPConnector.setup_pool_connections = setup_pool_connections
     conn = aiohttp.TCPConnector(limit=0) # No limit of parallel connections
     client = aiohttp.ClientSession(connector=conn)
-    args['client'] = client
+    ctx['client'] = client
 
 
-async def teardown(args):
-    await args['client'].close()
+async def teardown(ctx):
+    await ctx['client'].close()
 
 
 request_id = 0

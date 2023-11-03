@@ -24,7 +24,7 @@ from prompt_toolkit.history import FileHistory
 from prompt_toolkit.completion import Completer, Completion, NestedCompleter
 
 from stress_testing.stress_testing import setup, teardown, default_task, Parameters,\
-                           SequenceRequest, RandomValue, single_request
+                           Sequence, SequenceRequest, RandomValue, single_request
 
 
 pprint = pp.PrettyPrinter(indent=4).pprint
@@ -284,84 +284,88 @@ async def command_handler(args, rq, cq):
                 cmdline = await session.prompt_async(
                                     completer=completer)#,
                                     #complete_style=CompleteStyle.READLINE_LIKE)
-                cmd, *cmdargs = re.split(r'\s+', cmdline.strip())
-                if cmd in ['exit', 'quit', 'q']:
-                    break
-                elif cmd in ['h', 'help']:
-                    print('Available commands:')
-                    for cmd, (_, text) in commands.items():
-                        print(f'{cmd:<20} {text}')
+                try:
+                    cmd, *cmdargs = re.split(r'\s+', cmdline.strip())
+                    if cmd in ['exit', 'quit', 'q']:
+                        break
+                    elif cmd in ['h', 'help']:
+                        print('Available commands:')
+                        for cmd, (_, text) in commands.items():
+                            print(f'{cmd:<20} {text}')
 
-                elif cmd == 'start':
-                    if not cmdargs:
-                        print("Available jobs:")
-                        for name in jobs:
-                            print(f'- {name}')
-                    elif cmdargs[0] not in jobs:
-                        print('Invalid job name.')
-                    elif cmdargs[0] in running_jobs:
-                        print('Job is already running.')
-                    else:
-                        co = jobs[cmdargs[0]]
-                        ctx = Parameters(global_parameters)
-                        running_jobs[cmdargs[0]] = {
-                                'task': asyncio.create_task(co(args, ctx, rq)),
-                                'ctx': ctx
-                                }
-                elif cmd == 'stop':
-                    if cmdargs[0] not in jobs:
-                        print('Invalid job name.')
-                    elif cmdargs[0] not in running_jobs:
-                        print('Job is not running.')
-                    else:
-                        task = running_jobs[cmdargs[0]]['task']
-                        task.cancel()
-                        del running_jobs[cmdargs[0]]
-                elif cmd == 'jobs':
-                    if running_jobs:
-                        print('Running jobs:')
-                        for i, name in enumerate(running_jobs.keys(), 1):
-                            print(f'{i}: {name}')
-                    else:
-                        print("No running jobs.")
-                elif cmd == 'show':
-                    if cmdargs[0] == 'global':
-                        for k,v in global_parameters.items():
-                            print(f'{k}: {v}')
-                    elif cmdargs[0] == 'job':
-                        if cmdargs[1] in jobs:
-                            for k,v in running_jobs[cmdargs[1]]['ctx'].items():
-                                print(f'{k}:', v)
-                        else:
+                    elif cmd == 'start':
+                        if not cmdargs:
+                            print("Available jobs:")
+                            for name in jobs:
+                                print(f'- {name}')
+                        elif cmdargs[0] not in jobs:
                             print('Invalid job name.')
-                    else:
-                        print('Invalid argument.')
-                elif cmd == 'set':
-                    if cmdargs[0] == 'global':
-                        # TODO: Handle other datatypes than int
-                        global_parameters[cmdargs[1]] = int(cmdargs[2])
-                    elif cmdargs[0] == 'job':
-                        if cmdargs[1] in jobs:
-                            running_jobs[cmdargs[1]]['ctx'][cmdargs[2]] = int(cmdargs[3])
+                        elif cmdargs[0] in running_jobs:
+                            print('Job is already running.')
                         else:
+                            co = jobs[cmdargs[0]]
+                            ctx = Parameters(global_parameters)
+                            running_jobs[cmdargs[0]] = {
+                                    'task': asyncio.create_task(co(args, ctx, rq)),
+                                    'ctx': ctx
+                                    }
+                    elif cmd == 'stop':
+                        if cmdargs[0] not in jobs:
                             print('Invalid job name.')
-                elif cmd == 'zoom':
-                    c = {'cmd': 'zoom'}
-                    cq.put(c)
-                    cq.join()
-                elif cmd == 'clear':
-                    c = {'cmd': 'clear'}
-                    cq.put(c)
-                    cq.join()
-                elif cmd == 'last':
-                    print('result:', last_result)
-                    print('error:', last_error)
-                else:
-                    print("Unknown command.")
+                        elif cmdargs[0] not in running_jobs:
+                            print('Job is not running.')
+                        else:
+                            task = running_jobs[cmdargs[0]]['task']
+                            task.cancel()
+                            del running_jobs[cmdargs[0]]
+                    elif cmd == 'jobs':
+                        if running_jobs:
+                            print('Running jobs:')
+                            for i, name in enumerate(running_jobs.keys(), 1):
+                                print(f'{i}: {name}')
+                        else:
+                            print("No running jobs.")
+                    elif cmd == 'show':
+                        if cmdargs[0] == 'global':
+                            for k,v in global_parameters.items():
+                                print(f'{k}: {v}')
+                        elif cmdargs[0] == 'job':
+                            if cmdargs[1] in jobs:
+                                for k,v in running_jobs[cmdargs[1]]['ctx'].items():
+                                    if isinstance(v, Sequence):
+                                        print(f'{k}: {v.current()}')
+                                    else:                             
+                                        print(f'{k}: {v}')
+                            else:
+                                print('Invalid job name.')
+                        else:
+                            print('Invalid argument.')
+                    elif cmd == 'set':
+                        if cmdargs[0] == 'global':
+                            # TODO: Handle other datatypes than int
+                            global_parameters[cmdargs[1]] = int(cmdargs[2])
+                        elif cmdargs[0] == 'job':
+                            if cmdargs[1] in jobs:
+                                running_jobs[cmdargs[1]]['ctx'][cmdargs[2]] = int(cmdargs[3])
+                            else:
+                                print('Invalid job name.')
+                    elif cmd == 'zoom':
+                        c = {'cmd': 'zoom'}
+                        cq.put(c)
+                        cq.join()
+                    elif cmd == 'clear':
+                        c = {'cmd': 'clear'}
+                        cq.put(c)
+                        cq.join()
+                    elif cmd == 'last':
+                        print('result:', last_result)
+                        print('error:', last_error)
+                    else:
+                        print("Unknown command.")
+                except Exception as e:
+                    print(f"Error parsing command: {e}")
         except KeyboardInterrupt as e:
             raise e
-        except Exception as e:
-            print(f"Error parsing command: {e}")
         except BaseException as e:
             print(f"Error parsing command: {e}")
         finally:
