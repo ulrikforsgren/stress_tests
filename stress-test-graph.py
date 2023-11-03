@@ -1,17 +1,12 @@
 #!/usr/bin/env python3
 # -*- mode: python; python-indent: 4 -*-
 
-# TODO:
-# * Command console
-#  - Multiple tasks
-#  - Job handler
-# * Dict to pass parameters to running transaction task?!
-
 
 import argparse
 import asyncio
 from datetime import datetime
 import io
+import pprint as pp
 import queue
 import random
 import re
@@ -30,6 +25,9 @@ from prompt_toolkit.completion import Completer, Completion, NestedCompleter
 
 from stress_testing.stress_testing import setup, teardown, default_task, Parameters,\
                            SequenceRequest, RandomValue, single_request
+
+
+pprint = pp.PrettyPrinter(indent=4).pprint
 
 
 def parseArgs():
@@ -69,26 +67,27 @@ class DataQueue(queue.Queue):
         return self.r.fileno()
 
 
-gargs = {
-    'n_p': 20,
-    'delay': 5000,
-}
+#############################################################################
+#  SLIDING WINDOW JOB EXECUTOR
+#############################################################################
+
+
 last_result = None
 last_error = None
-# TODO: Rename function, like sliding_window ...
-async def stress_requests_stream(q, task, args):
-    global close_flag, gargs, last_result, last_error
+
+
+async def sliding_window_executor(q, task_function, intent):
+    global close_flag, global_parameters, last_result, last_error
     tasks = set()
 
-    await setup(args)
+    await setup(intent)
 
     try:
-        # TODO: Cleanup function, more readable
-        # Start initial n_p tasks
-        for _ in range(0, gargs['n_p']):
-            tasks.add(asyncio.create_task(task(**args)))
+        # Start initial n_p number of tasks
+        for _ in range(0, global_parameters['n_p']):
+            tasks.add(asyncio.create_task(task_function(**intent)))
 
-        while len(tasks)>0 and not close_flag:
+        while not close_flag:
             done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
             for d in done:
                 result = await d
@@ -97,90 +96,150 @@ async def stress_requests_stream(q, task, args):
                     last_error = last_result
                 # Push results to graph_handler
                 q.put(result)
-            # Start new tasks, but no more than n_p in total.
-            tasks_to_start = gargs['n_p']-len(pending)  # Calculate number of free task slots
+            # Start new tasks to keep a total of n_p number of tasks running.
+            tasks_to_start = global_parameters['n_p']-len(pending)  # Calculate number of free task slots
             if tasks_to_start>0:
-                for _ in range(0, tasks_to_start): # Start tasks in available slots
-                    pending.add(asyncio.create_task(task(**args)))
+                # Start tasks in available slots
+                for _ in range(0, tasks_to_start):
+                    pending.add(asyncio.create_task(task_function(**intent)))
             tasks = pending
     except asyncio.CancelledError:
         pass
     except Exception as e:
         print(e)
 
-    await teardown(args)
+    await teardown(intent)
 
 
+async def default_task2(client=None, parameters=Parameters(), host='', op='',
+                       url='', data='', resource_type='data', params=None):
+    url = re_sub.sub(lambda m: str(parameters[m.group(1)]), url)
+    data = re_sub.sub(lambda m: str(parameters[m.group(1)]), data)
+    parameters.update_request()
+    st = time.monotonic()
+    resp = await restconf_request(client,
+                                  host,
+                                  op,
+                                  url,
+                                  data,
+                                  resource_type,
+                                  params)
+    elapsed = time.monotonic()-st
+    return (*resp, elapsed)
 
-async def job_model_a(args, rq):
+
+#############################################################################
+#  JOBS
+#############################################################################
+
+
+# NOTE: Non-primitive datatypes will be shared between the running jobs.
+#       n_p is shared when it comes to the jobs window size.
+global_parameters = {
+    'n_p': 20,
+    'delay': 0,
+    'numvlan': 100,
+}
+
+
+async def job_model_a(args, ctx, rq):
     parameters = Parameters({
         "id": SequenceRequest(0, wrap=1000),
         "data": RandomValue(0, 4000000000),
     })
-    parameters.update(gargs)
+    parameters.update(ctx)
     data = {
         'host': args.host,
         'op': 'update',
         'url': '/model-a:model-a/model-a:list=K<<id>>',
         'data': '''{
                     "list":{
-                        "str-value":"Changed string data <<data>>"
+                        "str-value": "Changed string data <<data>>"
                     }
                 }''',
         'parameters': parameters
     }
-
-    # Just run for a very long time...
-    await stress_requests_stream(rq, default_task, data)
+    await sliding_window_executor(rq, default_task, data)
 
 
-async def job_python_service_create(args, rq):
+async def job_python_service_create(args, ctx, rq):
     parameters = Parameters({
         "id": SequenceRequest(0),
         "data": RandomValue(0, 4000000000),
         "delay": 0
     })
-    parameters.update(gargs)
+    parameters.update(ctx)
     data = {
         'host': args.host,
         'op': 'create',
         'url': '/python-service:python-service',
         'data': '''{
                     "service":{
-                        "name":"K<<id>>",
-                        "delay":<<delay>>,
-                        "str-value":"String data <<id>>"
+                        "name": "K<<id>>",
+                        "delay": <<delay>>,
+                        "str-value": "String data <<id>>"
                     }
                 }''',
         'parameters': parameters
     }
-
-    # Just run for a very long time...
-    await stress_requests_stream(rq, default_task, data)
+    await sliding_window_executor(rq, default_task, data)
 
 
-async def job_python_service_delete(args, rq):
+async def job_python_service_list_create(args, ctx, rq):
+    parameters = Parameters({
+        "id": SequenceRequest(0),
+        "data": RandomValue(0, 4000000000),
+        "delay": 0,
+        "numvlan": 100
+    })
+    parameters.update(ctx)
+    data = {
+        'host': args.host,
+        'op': 'create',
+        'url': '/python-service:python-service',
+        'data': '''{
+                    "service":{
+                        "name": "K<<id>>",
+                        "delay": <<delay>>,
+                        "template": "vlans",
+                        "device": "r<<id>>",
+                        "num-vlan": <<numvlan>>,
+                        "str-value": "String-<<id>>"
+                    }
+                }''',
+        'parameters': parameters
+    }
+    await sliding_window_executor(rq, default_task, data)
+
+
+async def job_python_service_delete(args, ctx, rq):
     parameters = Parameters({
         "id": SequenceRequest(0)
     })
+    parameters.update(ctx)
     data = {
         'host': args.host,
         'op': 'delete',
         'url': '/python-service:python-service/python-service:service=K<<id>>',
         'parameters': parameters
     }
-
-    # Just run for a very long time...
-    await stress_requests_stream(rq, default_task, data)
+    await sliding_window_executor(rq, default_task, data)
 
 
 jobs = {
     'model_a': job_model_a,
     'python_service_create': job_python_service_create,
+    'python_service_list_create': job_python_service_list_create,
     'python_service_delete': job_python_service_delete,
     'python_service_update': None, #job_model_update_python_service,
 }
 
+
+#############################################################################
+#  COMMAND PROMPT
+#############################################################################
+
+# Dictionary  str -> (coroutine, dict)
 running_jobs = {}
 
 class DictKeyCompleter(Completer):
@@ -193,48 +252,43 @@ class DictKeyCompleter(Completer):
                 yield Completion(k, start_position=-len(word))
 
 
-completer = NestedCompleter.from_nested_dict(
-    {
-        "start": set(jobs),
-        "stop": DictKeyCompleter(running_jobs),
-        "exit": None,
-        "show": None,
-        "set": {"n_p", "delay"},
-        "show": None,
-        "jobs": None,
-        "last": None,
-        "zoom": None,
-        "clear": None,
-        "help": None,
+commands = {
+        "start": (set(jobs), "Start a named job."),
+        "stop": (DictKeyCompleter(running_jobs), "Stop named jobs."),
+        "exit": (None, "Exit program."),
+        "show": (None, "Show job parameters."),
+        "set": ({"n_p", "delay"}, "Set a job parameter."),
+        "jobs": (None, "Show running jobs."),
+        "last": (None, "Show last request result and error."),
+        "zoom": (None, "Zoom graph."),
+        "clear": (None, "Clear graph data."),
+        "help": (None, "Show this help."),
     }
-)
+
+
+completer = NestedCompleter.from_nested_dict({
+    cmd: cmpltr for cmd, (cmpltr, _) in commands.items()
+})
+
 
 async def command_handler(args, rq, cq):
-    global close_flag, gargs
+    global close_flag, global_parameters
     req_task = None
-    cmd_history = FileHistory(".sustain_graph")
-    session = PromptSession("stress-tests> ", history=cmd_history)
+    cmd_history = FileHistory(".stress_test_graph")
+    session = PromptSession("stress-test> ", history=cmd_history)
     try:
         while not close_flag:
             cmdline = await session.prompt_async(
-                    completer=completer,
-                    complete_style=CompleteStyle.READLINE_LIKE)
+                    completer=completer)#,
+                    #complete_style=CompleteStyle.READLINE_LIKE)
             try:
                 cmd, *cmdargs = re.split(r'\s+', cmdline.strip())
                 if cmd in ['exit', 'quit', 'q']:
                     break
                 elif cmd in ['h', 'help']:
                     print('Available commands:')
-                    print('quit, q')
-                    print('help, h')
-                    print('start')
-                    print('stop')
-                    print('jobs')
-                    print('show')
-                    print('set')
-                    print('zoom')
-                    print('clear')
-                    print('last')
+                    for cmd, (_, text) in commands.items():
+                        print(f'{cmd:<20} {text}')
 
                 elif cmd == 'start':
                     if not cmdargs:
@@ -247,29 +301,32 @@ async def command_handler(args, rq, cq):
                         print('Job is already running.')
                     else:
                         co = jobs[cmdargs[0]]
-                        running_jobs[cmdargs[0]] = asyncio.create_task(co(args,
-                                                                          rq))
+                        ctx = global_parameters.copy()
+                        running_jobs[cmdargs[0]] = {
+                                'task': asyncio.create_task(co(args, ctx, rq)),
+                                'ctx': ctx
+                                }
                 elif cmd == 'stop':
                     if cmdargs[0] not in jobs:
                         print('Invalid job name.')
                     elif cmdargs[0] not in running_jobs:
                         print('Job is not running.')
                     else:
-                        task = running_jobs[cmdargs[0]]
+                        task = running_jobs[cmdargs[0]]['task']
                         task.cancel()
                         del running_jobs[cmdargs[0]]
                 elif cmd == 'jobs':
                     if running_jobs:
                         print('Running jobs:')
-                        for name in running_jobs.keys():
-                            print(f'- {name}')
+                        for i, name in enumerate(running_jobs.keys(), 1):
+                            print(f'{i}: {name}')
                     else:
                         print("No running jobs.")
                 elif cmd == 'show':
-                    for k,v in gargs.items():
+                    for k,v in global_parameters.items():
                         print(f'{k}: {v}')
                 elif cmd == 'set':
-                    gargs[cmdargs[0]] = int(cmdargs[1])
+                    global_parameters[cmdargs[0]] = int(cmdargs[1])
                 elif cmd == 'zoom':
                     c = {'cmd': 'zoom'}
                     cq.put(c)
@@ -312,6 +369,11 @@ async def stop_request_task():
 
 def async_handler(args, rq, cq):
     asyncio.run(amain(args, rq, cq))
+
+
+#############################################################################
+#  GRAPH HANDLER
+#############################################################################
 
 
 x = []
@@ -405,6 +467,10 @@ def graph_handler(args, rq, cq):
         if close_flag == 1:
             break
 
+
+#############################################################################
+#  MAIN
+#############################################################################
 
 def main(args):
     global close_flag
