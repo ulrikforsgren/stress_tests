@@ -104,7 +104,7 @@ async def sliding_window_executor(q, task_function, data):
         for _ in range(0, parameters['n_p']):
             tasks.add(asyncio.create_task(task_function(**data)))
             req_count += 1
-            if req_count >= stop:
+            if stop > 0 and req_count >= stop:
                 more_requests = False
                 break
 
@@ -128,7 +128,7 @@ async def sliding_window_executor(q, task_function, data):
                     for _ in range(0, tasks_to_start):
                         tasks.add(asyncio.create_task(task_function(**data)))
                         req_count += 1
-                        if req_count >= stop:
+                        if stop > 0 and req_count >= stop:
                             more_requests = False
                             break
     except asyncio.CancelledError:
