@@ -13,23 +13,24 @@ from xmlrpc.client import boolean
 
 from .restconf_api import REQ_DISPATCH, setup, teardown, restconf_request
 
-HOST='localhost'
-PORT=8080
+HOST = 'localhost'
+PORT = 8080
 
 pprint = pp.PrettyPrinter(indent=4).pprint
 
+
 class ansi:
-    RST =       '\033[0m'
-    BOLD =      '\033[1m'
-    DIM =       '\033[2m'
+    RST = '\033[0m'
+    BOLD = '\033[1m'
+    DIM = '\033[2m'
     UNDERLINE = '\033[4m'
-    REVERSE =   '\033[7m'
-    NREVERSE =  '\033[27m'
-    PINK =      '\033[95m'
-    BLUE =      '\033[94m'
-    GREEN =     '\033[92m'
-    YELLOW =    '\033[93m'
-    RED =       '\033[91m'
+    REVERSE = '\033[7m'
+    NREVERSE = '\033[27m'
+    PINK = '\033[95m'
+    BLUE = '\033[94m'
+    GREEN = '\033[92m'
+    YELLOW = '\033[93m'
+    RED = '\033[91m'
 
 
 def parseArgs(args, extra_actions=[]):
@@ -38,32 +39,32 @@ def parseArgs(args, extra_actions=[]):
                         help='host[:port]',
                         default='localhost:8080')
     parser.add_argument('cmd', nargs='+', choices=['clean', 'create', 'read',
-                                        'update', 'delete', 'crud', 'cud']
-                                        + extra_actions)
+                                                   'update', 'delete', 'crud', 'cud']
+                        + extra_actions)
     parser.add_argument("-n", required=False, type=int,
-            help='Number of total requests.')
+                        help='Number of total requests.')
     parser.add_argument("-o", required=False, action='store_true', default=False,
-            help="Run only one test instead of a sequence of tests")
+                        help="Run only one test instead of a sequence of tests")
     parser.add_argument("-b", required=False, type=int,
-            help='Max batch size. Starting 1, 2, 5, .., max')
+                        help='Max batch size. Starting 1, 2, 5, .., max')
     parser.add_argument("-s", required=False, type=str,
-            help='Batch size(s) comma sepated.')
+                        help='Batch size(s) comma sepated.')
     parser.add_argument("-p", required=False, type=str, action='append',
-            help='Alter parameters.')
+                        help='Alter parameters.')
     parser.add_argument("--single", required=False, action='store_true',
-            default=False, help='Run single test.')
+                        default=False, help='Run single test.')
     parser.add_argument("--no-networking", required=False, action='store_true',
-            default=False, help='Commit with no-networking.')
+                        default=False, help='Commit with no-networking.')
     parser.add_argument("--commit-queue", required=False, action='store_true',
-            default=False, help='Commit to commit-queue.')
+                        default=False, help='Commit to commit-queue.')
     parser.add_argument("-q", required=False, action='store_true',
-            default=False, help='Silent mode.')
+                        default=False, help='Silent mode.')
     parser.add_argument("-v", required=False, action='store_true',
-            default=False, help='Verbose mode. Show result of each request.')
+                        default=False, help='Verbose mode. Show result of each request.')
     parser.add_argument("--json", required=False, type=str,
-            help='Output result in json format to file.')
+                        help='Output result in json format to file.')
     parser.add_argument("--highlight", required=False, action='store_true',
-            default=False, help='Highlight output to make it more readable.')
+                        default=False, help='Highlight output to make it more readable.')
     return parser.parse_args(args)
 
 
@@ -84,23 +85,35 @@ parameters = Parameters({
     "group": SequenceBatch(0)
 })
 """
+
+
 class Sequence:
     def __init__(self, n):
         self.n = n
+
+    def set(self, n):
+        self.n = n
+
     def __str__(self):
         s = str(self.n)
         self.update_str()
         return s
+
     def update_str(self):
         self.n += 1
+
     def update_request(self):
         pass
+
     def update_batch(self):
         pass
+
     def __copy__(self):
         return self.__class__(self.n)
+
     def reset(self):
         self.n = 0
+
     def current(self):
         return self.n
 
@@ -109,8 +122,10 @@ class SequenceRequest(Sequence):
     def __init__(self, n, wrap=None):
         super(SequenceRequest, self).__init__(n)
         self.wrap = wrap
+
     def update_str(self):
         pass
+
     def update_request(self):
         self.n += 1
         if self.wrap is not None:
@@ -120,8 +135,10 @@ class SequenceRequest(Sequence):
 class SequenceBatch(Sequence):
     def __init__(self, n):
         super(SequenceBatch, self).__init__(n)
+
     def update_str(self):
         pass
+
     def update_batch(self):
         self.n += 1
 
@@ -131,8 +148,10 @@ class RandomValue(Sequence):
         super(RandomValue, self).__init__(0)
         self.lower = lower
         self.upper = upper
+
     def __str__(self):
         return str(random.randint(self.lower, self.upper))
+
     def current(self):
         return f'random value in range {self.lower}..{self.upper}'
 
@@ -141,17 +160,22 @@ class RandomValue(Sequence):
 class Parameters makes it possible provide parameters in the form of <<x>> in
 url and data strings.
 """
+
+
 class Parameters(dict):
     def __missing__(self, key):
         return "<<" + key + ">>"
+
     def update_request(self):
         for v in self.values():
             if isinstance(v, Sequence):
                 v.update_request()
+
     def update_batch(self):
         for v in self.values():
             if isinstance(v, Sequence):
                 v.update_batch()
+
     def update_cmdline(self, cmd_p):
         if cmd_p is None:
             return
@@ -164,6 +188,7 @@ class Parameters(dict):
                 self.update({k: v})
         else:
             raise TypeError(f'Invalid type: {type(cmd_p)}')
+
     def reset(self):
         for v in self.values():
             if isinstance(v, Sequence):
@@ -172,18 +197,19 @@ class Parameters(dict):
 
 def number_of_open_connections(conn):
     if len(conn._conns):
-        key = list(conn._conns.keys())[0] # Assuming only one key
+        key = list(conn._conns.keys())[0]  # Assuming only one key
         return len(conn._conns[key])
     else:
         return 0
 
+
 async def setup_connections(n_p, client, host):
     # Run n_p tasks in parallel to force client to setup n_p connections
     # This to remove the initial connection time from the results
-    tasks = [ asyncio.create_task(setup_task(client, host))
-              for p in range(0,n_p) ]
+    tasks = [asyncio.create_task(setup_task(client, host))
+             for p in range(0, n_p)]
     await asyncio.gather(*tasks)
-    #await asyncio.wait(tasks)
+    # await asyncio.wait(tasks)
 
 
 async def until_commit_queue_empty(client, host):
@@ -193,18 +219,18 @@ async def until_commit_queue_empty(client, host):
                            resource_type='operations')
 
 
-
 #
 # n_p connections are setup for each batch then closed
 #
 async def stress_requests_batch(n, n_p, setup, teardown, task, args):
     results = []
-    while n>0: # Execute requests in batches of n_p in parellel.
-        if n<n_p: n_p = n
+    while n > 0:  # Execute requests in batches of n_p in parellel.
+        if n < n_p:
+            n_p = n
         await setup(args)
         st = time.monotonic()
-        tasks = [ asyncio.create_task(task(**args))
-                  for p in range(0,n_p)]
+        tasks = [asyncio.create_task(task(**args))
+                 for p in range(0, n_p)]
         results += await asyncio.gather(*tasks)
         await teardown(args)
         if 'parameters' in args:
@@ -217,6 +243,8 @@ async def stress_requests_batch(n, n_p, setup, teardown, task, args):
 # n_p connections are setup and new requests and sent as a connection
 # becomes available.
 #
+
+
 async def stress_requests_window(n, n_p, setup, teardown, task, args):
     results = []
     tasks = set()
@@ -228,16 +256,16 @@ async def stress_requests_window(n, n_p, setup, teardown, task, args):
     st = time.monotonic()
     for _ in range(0, min(n, n_p)):
         tasks.add(asyncio.create_task(task(**args)))
-    n -= min(n, n_p) # Started initial tasks
+    n -= min(n, n_p)  # Started initial tasks
 
-    while len(tasks)>0:
+    while len(tasks) > 0:
         done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
         for d in done:
             result = await d
             results.append(result)
         a = n_p-len(pending)  # Calculate number of free task slots
         tasks_to_start = min(a, n)
-        for _ in range(0, tasks_to_start): # Start tasks in available slots
+        for _ in range(0, tasks_to_start):  # Start tasks in available slots
             pending.add(asyncio.create_task(task(**args)))
         n -= tasks_to_start
         tasks = pending
@@ -246,6 +274,7 @@ async def stress_requests_window(n, n_p, setup, teardown, task, args):
     await teardown(args)
     return elapsed, results
 
+
 async def single_request(args, setup=setup, teardown=teardown):
     # Setup connection pool
     await setup(args)
@@ -253,6 +282,7 @@ async def single_request(args, setup=setup, teardown=teardown):
     # Cleanup connection pool
     await teardown(args)
     return result
+
 
 async def setup_task(client, host):
     # Reading an arbitrary leaf to force the client to setup a connection.
@@ -268,6 +298,7 @@ async def setup_task(client, host):
 
 
 re_sub = re.compile(r'<<(\w+)>>')
+
 
 async def default_task(client=None, parameters=Parameters(), host='', op='',
                        url='', data='', resource_type='data', params=None):
@@ -288,6 +319,8 @@ async def default_task(client=None, parameters=Parameters(), host='', op='',
 #
 # Assert that all results are "ok"
 #
+
+
 def assert_ok(results):
     assertion = True
     for r in results:
@@ -295,8 +328,9 @@ def assert_ok(results):
         if res == 'ok':
             pass
         elif res == 'nok':
-            st,data,el = rest
-            print(f"ERROR: wrong status returned {rid}: {st} != {expected_status}")
+            st, data, el = rest
+            print(
+                f"ERROR: wrong status returned {rid}: {st} != {expected_status}")
             print(data)
             assertion = False
         elif res == 'exception':
@@ -318,7 +352,7 @@ def calc_average(results):
     for r in results:
         rid, res, *rest = r
         if res == 'ok':
-            st,_,el = rest
+            st, _, el = rest
             total_ok += el
             count_ok += 1
         elif res == 'nok':
@@ -328,8 +362,10 @@ def calc_average(results):
 
     return count_ok, total_ok, count_wrong, count_exc
 
+
 def set_flags(args, req):
     flags = ''
+
     def add_flag(flags, flag):
         if flags:
             flags += '&'
@@ -341,10 +377,12 @@ def set_flags(args, req):
         flags = add_flag(flags, "commit-queue")
     req['params'] = flags
 
+
 def do_test(args, n, n_p, req, task=None):
     task = task or default_task
     set_flags(args, req)
-    elapsed, results = asyncio.run(stress_requests_window(n, n_p, setup, teardown, task, req))
+    elapsed, results = asyncio.run(
+        stress_requests_window(n, n_p, setup, teardown, task, req))
 
     if args.v:
         pprint(results)
@@ -362,7 +400,7 @@ def run_test_in_subprocess(args, func, n, n_p, req, task=None, do_print=False):
     result = func(args, n, n_p, req, task)
     elapsed, count, total, count_wrong, count_exc, results = result
     if count:
-        average=total/count
+        average = total/count
     else:
         average = -1.0
     if do_print:
@@ -375,10 +413,10 @@ def run_test_in_subprocess(args, func, n, n_p, req, task=None, do_print=False):
 def np_gen(max_p):
     n = 1
     m = 1
-    while n<=max_p:
-        for s in [1,2,5]:
+    while n <= max_p:
+        for s in [1, 2, 5]:
             np = s*m
-            if np<max_p:
+            if np < max_p:
                 yield np
             else:
                 yield max_p
@@ -394,7 +432,7 @@ def run_tests(which, args, tests, n, max_p, task=None, do_print=False):
         max_p = min(args.b, n)
 
     if not args.s:
-        n_ps = [ n for n in np_gen(max_p) ]
+        n_ps = [n for n in np_gen(max_p)]
     else:
         n_ps = list(map(int, args.s.split(',')))
 
@@ -418,29 +456,35 @@ def run_tests(which, args, tests, n, max_p, task=None, do_print=False):
 
     results = []
     for r, n_p in enumerate(n_ps):
-        if args.highlight and r%2 == 1: print(ansi.DIM, end='')
+        if args.highlight and r % 2 == 1:
+            print(ansi.DIM, end='')
         for op in which:
             req = tests[op]
             req['host'] = args.host
             if 'parameters' in req:
                 req['parameters'].update_cmdline(args.p)
-            results.append((op, n, n_p, run_test_in_subprocess(args, do_test, n, n_p, req, task, do_print)))
-        if args.highlight and r%2 == 1: print(ansi.RST, end='')
+            results.append((op, n, n_p, run_test_in_subprocess(
+                args, do_test, n, n_p, req, task, do_print)))
+        if args.highlight and r % 2 == 1:
+            print(ansi.RST, end='')
     if args.json:
         open(args.json, "w").write(json.dumps(results))
     return results
 
+
 def run_crud_tests(args, tests, n, max_p, task=None, do_print=False):
     return run_tests(['create', 'read', 'update', 'delete'], args, tests, n, max_p, task, do_print)
+
 
 def run_single_test(tc, args, tests, task=None):
     n = args.n or 1
     n_p = args.b or 1
     req = tests[tc]
-    req['host']  = args.host
-    elapsed, count, total, count_wrong, count_exc, results = do_test(args, n, n_p, req, task)
+    req['host'] = args.host
+    elapsed, count, total, count_wrong, count_exc, results = do_test(
+        args, n, n_p, req, task)
     if count:
-        average=total/count
+        average = total/count
     else:
         average = -1
 
@@ -454,6 +498,7 @@ def run_single_test(tc, args, tests, task=None):
         print("Exceptions:         ", count_exc)
 
     return (args.cmd, n, n_p, (elapsed, count, total, average, count_wrong, count_exc, results))
+
 
 def run_test(args, tests, n=500, max_p=50, task=None, do_print=True):
     if args.cmd == 'clean':

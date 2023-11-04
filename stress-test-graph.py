@@ -304,6 +304,16 @@ async def job_devices_sync_from(args, ctx, rq):
     await sliding_window_executor(rq, default_task, data)
 
 
+async def job_dummy(args, ctx, rq):
+    ctx.update({
+        "id": RandomValue(0, 4000000000),
+        "requests-count": 0
+    })
+    while not close_flag:
+        ctx['requests-count'] += 1
+        await asyncio.sleep(1)
+
+
 jobs = {
     'model_a': job_model_a,
     'python_service_create': job_python_service_create,
@@ -313,6 +323,7 @@ jobs = {
     'python_service_delete': job_python_service_delete,
     'python_service_update': None,  # job_model_update_python_service,
     'devices-sync-from': job_devices_sync_from,
+    'dummy': job_dummy
 }
 
 
@@ -354,6 +365,30 @@ class DictKeyCompleter(Completer):
                 yield Completion(k, start_position=-len(word))
 
 
+class DictDictKeyCompleter(Completer):
+    def __init__(self, d):
+        self.d = d
+
+    def get_completions(self, document, complete_event):
+        word = document.get_word_before_cursor()
+        start = document.find_previous_word_beginning(1)
+        start2 = document.find_previous_word_beginning(2)
+        start3 = document.find_previous_word_beginning(3)
+
+        if start2 is None and not (start is not None and word == ''):
+            for k in self.d.keys():
+                if k.startswith(word):
+                    yield Completion(k, start_position=-len(word))
+        elif start3 is None and not (start2 is not None and word == ''):
+            s = start if start2 is None else start2
+            e = -1 if start2 is None else start-1
+            name = document.text_before_cursor[s:e]
+            if name in self.d:
+                for k in self.d[name]['ctx'].keys():
+                    if k.startswith(word):
+                        yield Completion(k, start_position=-len(word))
+
+
 commands = {
     "start": (set(jobs), "Start a named job."),
     "stop": (DictKeyCompleter(running_jobs), "Stop named jobs."),
@@ -365,7 +400,7 @@ commands = {
     }, "Show job parameters."),
     "set": ({
             'global': None,
-            'job': DictKeyCompleter(running_jobs)
+            'job': DictDictKeyCompleter(running_jobs)
             }, "Set job parameters."),
     "jobs": (None, "Show running jobs."),
     "last": (None, "Show last request result and error."),
@@ -465,8 +500,16 @@ async def command_handler(args, rq, cq):
                                 global_parameters[cmdargs[1]] = int(cmdargs[2])
                             elif cmdargs[0] == 'job':
                                 if cmdargs[1] in jobs:
-                                    running_jobs[cmdargs[1]]['ctx'][cmdargs[2]] = int(
-                                        cmdargs[3])
+                                    ctx = running_jobs[cmdargs[1]]['ctx']
+                                    v = ctx[cmdargs[2]]
+                                    if v is int:
+                                        ctx[cmdargs[2]] = int(cmdargs[3])
+                                    elif v is str:
+                                        ctx[cmdargs[2]] = cmdargs[3]
+                                    elif v is float:
+                                        ctx[cmdargs[2]] = float(cmdargs[3])
+                                    elif isinstance(v, Sequence):
+                                        ctx[cmdargs[2]].set(int(cmdargs[3]))
                                 else:
                                     print('Invalid job name.')
                         elif cmd == 'zoom':
