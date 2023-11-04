@@ -4,7 +4,7 @@
 
 import argparse
 import asyncio
-from datetime import datetime
+from datetime import datetime, timedelta
 import io
 import pprint as pp
 import queue
@@ -245,15 +245,26 @@ jobs = {
 #  COMMAND PROMPT HANDLER
 #############################################################################
 
-# Dictionary  str -> (coroutine, dict)
+# Dictionary  str -> { 'task': task, 'ctx': dict)
 running_jobs = {}
+# Dictionary  str -> dict
+completed_jobs = {}
 
 
 async def job_executor(name, task):
-    global running_jobs
+    global running_jobs, completed_jobs
+    starttime = datetime.now()
+    start = time.monotonic()
     await task
-    print(f"JOB DONE: {name}", flush=True)
+    runtime = time.monotonic()-start
+    completed_jobs[name] = {
+        'start': starttime.isoformat(),
+        'end': (starttime+timedelta(seconds=runtime)).isoformat(),
+        'runtime': runtime
+    }
+    print(f"JOB DONE: {name} {runtime} seconds", flush=True)
     if name in running_jobs:
+        completed_jobs[name].update(running_jobs[name]['ctx'])
         del running_jobs[name]
 
 
@@ -274,7 +285,8 @@ commands = {
     "exit": (None, "Exit program."),
     "show": ({
         'global': None,
-        'job': DictKeyCompleter(running_jobs)
+        'job': DictKeyCompleter(running_jobs),
+        'completed': DictKeyCompleter(completed_jobs)
     }, "Show job parameters."),
     "set": ({
             'global': None,
@@ -355,6 +367,15 @@ async def command_handler(args, rq, cq):
                             elif cmdargs[0] == 'job':
                                 if cmdargs[1] in jobs:
                                     for k, v in running_jobs[cmdargs[1]]['ctx'].items():
+                                        if isinstance(v, Sequence):
+                                            print(f'{k:<20}: {v.current()}')
+                                        else:
+                                            print(f'{k:<20}: {v}')
+                                else:
+                                    print('Invalid job name.')
+                            elif cmdargs[0] == 'completed':
+                                if cmdargs[1] in completed_jobs:
+                                    for k, v in completed_jobs[cmdargs[1]].items():
                                         if isinstance(v, Sequence):
                                             print(f'{k:<20}: {v.current()}')
                                         else:
