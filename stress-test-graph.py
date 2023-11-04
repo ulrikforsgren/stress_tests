@@ -100,9 +100,11 @@ async def sliding_window_executor(q, task_function, data):
 
         parameters = data['parameters']
         parameters['requests-count'] = 0
+        stop = parameters.get('stop', 0)
 
-        while not close_flag:
-            done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+        stop_job = False
+        while not close_flag and not stop_job:
+            done, tasks = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
             for d in done:
                 global_parameters['requests-count'] += 1
                 parameters['requests-count'] += 1
@@ -112,38 +114,26 @@ async def sliding_window_executor(q, task_function, data):
                     last_error = last_result
                 # Push results to graph_handler
                 q.put(result)
+                if stop > 0 and parameters['requests-count'] >= stop:
+                    stop_job = True
+                    break
+            if stop_job:
+                break
             # Start new tasks to keep a total of n_p number of tasks running.
             # Calculate number of free task slots
-            tasks_to_start = data['parameters']['n_p']-len(pending)
+            tasks_to_start = data['parameters']['n_p']-len(tasks)
             if tasks_to_start > 0:
                 # Start tasks in available slots
                 for _ in range(0, tasks_to_start):
-                    pending.add(asyncio.create_task(task_function(**data)))
-            tasks = pending
+                    tasks.add(asyncio.create_task(task_function(**data)))
     except asyncio.CancelledError:
+        pass
+    except Exception as e:
+        print("EXCEPTION", e)
+    finally:
         for t in tasks:
             t.cancel()
-    except:
-        print(e)
-    finally:
         await teardown(data)
-
-
-async def default_task2(client=None, parameters=Parameters(), host='', op='',
-                        url='', data='', resource_type='data', params=None):
-    url = re_sub.sub(lambda m: str(parameters[m.group(1)]), url)
-    data = re_sub.sub(lambda m: str(parameters[m.group(1)]), data)
-    parameters.update_request()
-    st = time.monotonic()
-    resp = await restconf_request(client,
-                                  host,
-                                  op,
-                                  url,
-                                  data,
-                                  resource_type,
-                                  params)
-    elapsed = time.monotonic()-st
-    return (*resp, elapsed)
 
 
 #############################################################################
@@ -259,6 +249,14 @@ jobs = {
 running_jobs = {}
 
 
+async def job_executor(name, task):
+    global running_jobs
+    await task
+    print(f"JOB DONE: {name}", flush=True)
+    if name in running_jobs:
+        del running_jobs[name]
+
+
 class DictKeyCompleter(Completer):
     def __init__(self, d):
         self.d = d
@@ -299,108 +297,110 @@ async def command_handler(args, rq, cq):
     global close_flag, global_parameters
     req_task = None
     cmd_history = FileHistory(".stress_test_graph")
-    session = PromptSession("benchmarking-nso> ", history=cmd_history)
-    try:
+    with patch_stdout():
+        session = PromptSession("benchmarking-nso> ", history=cmd_history)
         try:
-            while not close_flag:
-                cmdline = await session.prompt_async(
-                    completer=completer)  # ,
-                # complete_style=CompleteStyle.READLINE_LIKE)
-                try:
-                    cmd, *cmdargs = re.split(r'\s+', cmdline.strip())
-                    if cmd in ['exit', 'quit', 'q']:
-                        break
-                    elif cmd in ['h', 'help']:
-                        print('Available commands:')
-                        for cmd, (_, text) in commands.items():
-                            print(f'{cmd:<20} {text}')
+            try:
+                while not close_flag:
+                    cmdline = await session.prompt_async(
+                        completer=completer)  # ,
+                    # complete_style=CompleteStyle.READLINE_LIKE)
+                    try:
+                        cmd, *cmdargs = re.split(r'\s+', cmdline.strip())
+                        if cmd in ['exit', 'quit', 'q']:
+                            break
+                        elif cmd in ['h', 'help']:
+                            print('Available commands:')
+                            for cmd, (_, text) in commands.items():
+                                print(f'{cmd:<20} {text}')
 
-                    elif cmd == 'start':
-                        if not cmdargs:
-                            print("Available jobs:")
-                            for name in jobs:
-                                print(f'- {name}')
-                        elif cmdargs[0] not in jobs:
-                            print('Invalid job name.')
-                        elif cmdargs[0] in running_jobs:
-                            print('Job is already running.')
-                        else:
-                            co = jobs[cmdargs[0]]
-                            ctx = Parameters(dict_copy_except(
-                                global_parameters, ['requests-count']))
-                            running_jobs[cmdargs[0]] = {
-                                'task': asyncio.create_task(co(args, ctx, rq)),
-                                'ctx': ctx
-                            }
-                    elif cmd == 'stop':
-                        if cmdargs[0] not in jobs:
-                            print('Invalid job name.')
-                        elif cmdargs[0] not in running_jobs:
-                            print('Job is not running.')
-                        else:
-                            task = running_jobs[cmdargs[0]]['task']
-                            task.cancel()
-                            del running_jobs[cmdargs[0]]
-                    elif cmd == 'jobs':
-                        if running_jobs:
-                            print('Running jobs:')
-                            for i, name in enumerate(running_jobs.keys(), 1):
-                                print(f'{i}: {name}')
-                        else:
-                            print("No running jobs.")
-                    elif cmd == 'show':
-                        if cmdargs[0] == 'global':
-                            for k, v in global_parameters.items():
-                                print(f'{k}: {v}')
-                        elif cmdargs[0] == 'job':
-                            if cmdargs[1] in jobs:
-                                for k, v in running_jobs[cmdargs[1]]['ctx'].items():
-                                    if isinstance(v, Sequence):
-                                        print(f'{k}: {v.current()}')
-                                    else:
-                                        print(f'{k}: {v}')
-                            else:
+                        elif cmd == 'start':
+                            if not cmdargs:
+                                print("Available jobs:")
+                                for name in jobs:
+                                    print(f'- {name}')
+                            elif cmdargs[0] not in jobs:
                                 print('Invalid job name.')
-                        else:
-                            print('Invalid argument.')
-                    elif cmd == 'set':
-                        if cmdargs[0] == 'global':
-                            # TODO: Handle other datatypes than int
-                            global_parameters[cmdargs[1]] = int(cmdargs[2])
-                        elif cmdargs[0] == 'job':
-                            if cmdargs[1] in jobs:
-                                running_jobs[cmdargs[1]]['ctx'][cmdargs[2]] = int(
-                                    cmdargs[3])
+                            elif cmdargs[0] in running_jobs:
+                                print('Job is already running.')
                             else:
+                                co = jobs[cmdargs[0]]
+                                ctx = Parameters(dict_copy_except(
+                                    global_parameters, ['requests-count']))
+                                running_jobs[cmdargs[0]] = {
+                                    'task': asyncio.create_task(job_executor(cmdargs[0], co(args, ctx, rq))),
+                                    'ctx': ctx
+                                }
+                        elif cmd == 'stop':
+                            if cmdargs[0] not in jobs:
                                 print('Invalid job name.')
-                    elif cmd == 'zoom':
-                        c = {'cmd': 'zoom'}
-                        cq.put(c)
-                        cq.join()
-                    elif cmd == 'clear':
-                        c = {'cmd': 'clear'}
-                        cq.put(c)
-                        cq.join()
-                    elif cmd == 'last':
-                        print('result:', last_result)
-                        print('error:', last_error)
-                    else:
-                        print("Unknown command.")
-                except Exception as e:
-                    print(f"Error parsing command: {e}")
-        except KeyboardInterrupt as e:
-            raise e
-        except BaseException as e:
-            print(f"Error parsing command: {e}")
-        finally:
-            print("Exiting...", flush=True)
-    except KeyboardInterrupt:
-        pass
-    except asyncio.CancelledError:
-        pass
-    close_flag = 1
-    if req_task is not None:
-        req_task.cancel()
+                            elif cmdargs[0] not in running_jobs:
+                                print('Job is not running.')
+                            else:
+                                task = running_jobs[cmdargs[0]]['task']
+                                task.cancel()
+                                # del running_jobs[cmdargs[0]]
+                        elif cmd == 'jobs':
+                            if running_jobs:
+                                print('Running jobs:')
+                                # TODO: Increasing number for each job
+                                for i, name in enumerate(running_jobs.keys(), 1):
+                                    print(f'{i}: {name}')
+                            else:
+                                print("No running jobs.")
+                        elif cmd == 'show':
+                            if cmdargs[0] == 'global':
+                                for k, v in global_parameters.items():
+                                    print(f'{k:<20}: {v}')
+                            elif cmdargs[0] == 'job':
+                                if cmdargs[1] in jobs:
+                                    for k, v in running_jobs[cmdargs[1]]['ctx'].items():
+                                        if isinstance(v, Sequence):
+                                            print(f'{k:<20}: {v.current()}')
+                                        else:
+                                            print(f'{k:<20}: {v}')
+                                else:
+                                    print('Invalid job name.')
+                            else:
+                                print('Invalid argument.')
+                        elif cmd == 'set':
+                            if cmdargs[0] == 'global':
+                                # TODO: Handle other datatypes than int
+                                global_parameters[cmdargs[1]] = int(cmdargs[2])
+                            elif cmdargs[0] == 'job':
+                                if cmdargs[1] in jobs:
+                                    running_jobs[cmdargs[1]]['ctx'][cmdargs[2]] = int(
+                                        cmdargs[3])
+                                else:
+                                    print('Invalid job name.')
+                        elif cmd == 'zoom':
+                            c = {'cmd': 'zoom'}
+                            cq.put(c)
+                            cq.join()
+                        elif cmd == 'clear':
+                            c = {'cmd': 'clear'}
+                            cq.put(c)
+                            cq.join()
+                        elif cmd == 'last':
+                            print('result:', last_result)
+                            print('error:', last_error)
+                        else:
+                            print("Unknown command.")
+                    except Exception as e:
+                        print(f"Error parsing command: {e}")
+            except KeyboardInterrupt as e:
+                raise e
+            except BaseException as e:
+                print(f"Error parsing command: {e}")
+            finally:
+                print("Exiting...", flush=True)
+        except KeyboardInterrupt:
+            pass
+        except asyncio.CancelledError:
+            pass
+        close_flag = 1
+        if req_task is not None:
+            req_task.cancel()
 
 
 event_loop = None
