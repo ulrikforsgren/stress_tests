@@ -190,7 +190,7 @@ async def job_python_service_create(args, ctx, rq):
                     "service":{
                         "name": "K<<id>>",
                         "delay": <<delay>>,
-                        "str-value": "String data <<id>>"
+                        "str-value": "String data <<data>>"
                     }
                 }''',
         'parameters': ctx
@@ -198,12 +198,13 @@ async def job_python_service_create(args, ctx, rq):
     await sliding_window_executor(rq, default_task, data)
 
 
-async def job_python_service_list_create(args, ctx, rq):
+async def job_python_service_list_create_no_networking(args, ctx, rq):
     ctx.update({
         "id": SequenceRequest(0),
         "data": RandomValue(0, 4000000000),
         "delay": 0,
-        "numvlan": 1
+        "numvlan": 1,
+        "stop": 1
     })
     data = {
         'host': args.host,
@@ -216,11 +217,62 @@ async def job_python_service_list_create(args, ctx, rq):
                         "template": "vlans",
                         "device": "r<<id>>",
                         "num-vlan": <<numvlan>>,
-                        "str-value": "String-<<id>>"
+                        "str-value": "<<data>>"
                     }
                 }''',
         'parameters': ctx,
         'params': 'no-networking'
+    }
+    await sliding_window_executor(rq, default_task, data)
+
+
+async def job_python_service_list_update_no_networking(args, ctx, rq):
+    ctx.update({
+        "id": SequenceRequest(0, wrap=1000),
+        "data": RandomValue(0, 4000000000),
+        "delay": 0,
+        "numvlan": 1
+    })
+    data = {
+        'host': args.host,
+        'op': 'update',
+        'url': '/python-service:python-service/service=K<<id>>',
+        'data': '''{
+                    "service":{
+                        "delay": <<delay>>,
+                        "template": "vlans",
+                        "device": "r<<id>>",
+                        "num-vlan": <<numvlan>>,
+                        "str-value": "<<data>>"
+                    }
+                }''',
+        'parameters': ctx,
+        'params': 'no-networking'
+    }
+    await sliding_window_executor(rq, default_task, data)
+
+
+async def job_python_service_list_update(args, ctx, rq):
+    ctx.update({
+        "id": SequenceRequest(0, wrap=1000),
+        "data": RandomValue(0, 4000000000),
+        "delay": 0,
+        "numvlan": 1
+    })
+    data = {
+        'host': args.host,
+        'op': 'update',
+        'url': '/python-service:python-service/service=K<<id>>',
+        'data': '''{
+                    "service":{
+                        "delay": <<delay>>,
+                        "template": "vlans",
+                        "device": "r<<id>>",
+                        "num-vlan": <<numvlan>>,
+                        "str-value": "<<data>>"
+                    }
+                }''',
+        'parameters': ctx
     }
     await sliding_window_executor(rq, default_task, data)
 
@@ -255,7 +307,9 @@ async def job_devices_sync_from(args, ctx, rq):
 jobs = {
     'model_a': job_model_a,
     'python_service_create': job_python_service_create,
-    'python_service_list_create': job_python_service_list_create,
+    'python_service_list_create_no_networking': job_python_service_list_create_no_networking,
+    'python_service_list_update_no_networking': job_python_service_list_update_no_networking,
+    'python_service_list_update': job_python_service_list_update,
     'python_service_delete': job_python_service_delete,
     'python_service_update': None,  # job_model_update_python_service,
     'devices-sync-from': job_devices_sync_from,
