@@ -115,7 +115,7 @@ class Sequence:
         self.n = 0
 
     def current(self):
-        return self.n
+        return f'Sequence(n={self.n})'
 
 
 class SequenceRequest(Sequence):
@@ -130,6 +130,9 @@ class SequenceRequest(Sequence):
         self.n += 1
         if self.wrap is not None:
             self.n = self.n % self.wrap
+
+    def current(self):
+        return f'SequenceRequest(n={self.n}, wrap={self.wrap})'
 
 
 class SequenceBatch(Sequence):
@@ -153,7 +156,7 @@ class RandomValue(Sequence):
         return str(random.randint(self.lower, self.upper))
 
     def current(self):
-        return f'random value in range {self.lower}..{self.upper}'
+        return f'RandomValue({self.lower}..{self.upper})'
 
 
 """
@@ -163,6 +166,19 @@ url and data strings.
 
 
 class Parameters(dict):
+    def set(self, d):
+        for k, v in d.items():
+            if k in self:
+                ov = self[k]
+                if isinstance(ov, Sequence):
+                    ov.set(v)
+                elif ov is int:
+                    self[k] = int(v)
+                elif ov is float:
+                    self[k] = float(v)
+                else:
+                    self[k] = v
+
     def __missing__(self, key):
         return "<<" + key + ">>"
 

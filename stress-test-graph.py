@@ -81,6 +81,15 @@ def dict_copy_except(d, keys):
     return {k: v for k, v in d.items() if k not in keys}
 
 
+# Function convert a list of string with the format "key=value" to a dictionary
+def str_to_dict(l):
+    d = {}
+    for s in l:
+        k, v = s.split('=')
+        d[k] = int(v)
+    return d
+
+
 #############################################################################
 #  SLIDING WINDOW JOB EXECUTOR
 #############################################################################
@@ -157,11 +166,12 @@ global_parameters = {
 }
 
 
-async def job_model_a(args, ctx, rq):
+async def job_model_a(args, ctx, rq, extra_params={}):
     ctx.update({
         "id": SequenceRequest(0, wrap=1000),
         "data": RandomValue(0, 4000000000),
     })
+    ctx.set(extra_params)
     data = {
         'host': ctx['host'],
         'op': 'update',
@@ -176,12 +186,13 @@ async def job_model_a(args, ctx, rq):
     await sliding_window_executor(rq, default_task, data)
 
 
-async def job_python_service_create(args, ctx, rq):
+async def job_python_service_create(args, ctx, rq, extra_params={}):
     ctx.update({
         "id": SequenceRequest(0),
         "data": RandomValue(0, 4000000000),
         "delay": 0
     })
+    ctx.set(extra_params)
     data = {
         'host': ctx['host'],
         'op': 'create',
@@ -198,7 +209,7 @@ async def job_python_service_create(args, ctx, rq):
     await sliding_window_executor(rq, default_task, data)
 
 
-async def job_python_service_list_create_no_networking(args, ctx, rq):
+async def job_python_service_list_create_no_networking(args, ctx, rq, extra_params={}):
     ctx.update({
         "id": SequenceRequest(0),
         "data": RandomValue(0, 4000000000),
@@ -206,6 +217,7 @@ async def job_python_service_list_create_no_networking(args, ctx, rq):
         "numvlan": 1,
         "stop": 1
     })
+    ctx.set(extra_params)
     data = {
         'host': args.host,
         'op': 'create',
@@ -226,13 +238,14 @@ async def job_python_service_list_create_no_networking(args, ctx, rq):
     await sliding_window_executor(rq, default_task, data)
 
 
-async def job_python_service_list_update_no_networking(args, ctx, rq):
+async def job_python_service_list_update_no_networking(args, ctx, rq, extra_params={}):
     ctx.update({
         "id": SequenceRequest(0, wrap=1000),
         "data": RandomValue(0, 4000000000),
         "delay": 0,
         "numvlan": 1
     })
+    ctx.set(extra_params)
     data = {
         'host': args.host,
         'op': 'update',
@@ -252,13 +265,14 @@ async def job_python_service_list_update_no_networking(args, ctx, rq):
     await sliding_window_executor(rq, default_task, data)
 
 
-async def job_python_service_list_update(args, ctx, rq):
+async def job_python_service_list_update(args, ctx, rq, extra_params={}):
     ctx.update({
         "id": SequenceRequest(0, wrap=1000),
         "data": RandomValue(0, 4000000000),
         "delay": 0,
         "numvlan": 1
     })
+    ctx.set(extra_params)
     data = {
         'host': args.host,
         'op': 'update',
@@ -277,10 +291,11 @@ async def job_python_service_list_update(args, ctx, rq):
     await sliding_window_executor(rq, default_task, data)
 
 
-async def job_python_service_delete(args, ctx, rq):
+async def job_python_service_delete(args, ctx, rq, extra_params={}):
     ctx.update({
         "id": SequenceRequest(0)
     })
+    ctx.set(extra_params)
     data = {
         'host': args.host,
         'op': 'delete',
@@ -290,11 +305,12 @@ async def job_python_service_delete(args, ctx, rq):
     await sliding_window_executor(rq, default_task, data)
 
 
-async def job_devices_sync_from(args, ctx, rq):
+async def job_devices_sync_from(args, ctx, rq, extra_params=None):
     ctx.update({
         "id": SequenceRequest(0),
         'stop': 1000
     })
+    ctx.set(extra_params)
     data = {
         'host': args.host,
         'op': 'action',
@@ -304,15 +320,19 @@ async def job_devices_sync_from(args, ctx, rq):
     await sliding_window_executor(rq, default_task, data)
 
 
-async def job_dummy(args, ctx, rq):
+async def job_dummy(args, ctx, rq, extra_params=None):
     ctx.update({
         "id": RandomValue(0, 4000000000),
+        "value": SequenceRequest(0),
         "requests-count": 0
     })
-    while not close_flag:
-        ctx['requests-count'] += 1
-        await asyncio.sleep(1)
-
+    ctx.set(extra_params)
+    try:
+        while not close_flag:
+            ctx['requests-count'] += 1
+            await asyncio.sleep(1)
+    except asyncio.CancelledError:
+        pass
 
 jobs = {
     'model_a': job_model_a,
@@ -449,8 +469,10 @@ async def command_handler(args, rq, cq):
                                 co = jobs[cmdargs[0]]
                                 ctx = Parameters(dict_copy_except(
                                     global_parameters, ['requests-count']))
+                                extra_params = str_to_dict(cmdargs[1:])
                                 running_jobs[cmdargs[0]] = {
-                                    'task': asyncio.create_task(job_executor(cmdargs[0], co(args, ctx, rq))),
+                                    'task': asyncio.create_task(
+                                        job_executor(cmdargs[0], co(args, ctx, rq, extra_params=extra_params))),
                                     'ctx': ctx
                                 }
                         elif cmd == 'stop':
@@ -495,23 +517,32 @@ async def command_handler(args, rq, cq):
                             else:
                                 print('Invalid argument.')
                         elif cmd == 'set':
+                            idx = 0
                             if cmdargs[0] == 'global':
-                                # TODO: Handle other datatypes than int
-                                global_parameters[cmdargs[1]] = int(cmdargs[2])
+                                ctx = global_parameters
+                                idx = 1
                             elif cmdargs[0] == 'job':
                                 if cmdargs[1] in jobs:
-                                    ctx = running_jobs[cmdargs[1]]['ctx']
-                                    v = ctx[cmdargs[2]]
-                                    if v is int:
-                                        ctx[cmdargs[2]] = int(cmdargs[3])
-                                    elif v is str:
-                                        ctx[cmdargs[2]] = cmdargs[3]
-                                    elif v is float:
-                                        ctx[cmdargs[2]] = float(cmdargs[3])
-                                    elif isinstance(v, Sequence):
-                                        ctx[cmdargs[2]].set(int(cmdargs[3]))
+                                    idx = 2
                                 else:
                                     print('Invalid job name.')
+                                    ctx = running_jobs[cmdargs[1]]['ctx']
+                            if idx:
+                                if cmdargs[idx] in ctx:
+                                    v = ctx[cmdargs[idx]]
+                                    if v is int:
+                                        ctx[cmdargs[idx]] = int(cmdargs[idx+1])
+                                    elif v is str:
+                                        ctx[cmdargs[idx]] = cmdargs[idx+1]
+                                    elif v is float:
+                                        ctx[cmdargs[idx]] = float(
+                                            cmdargs[idx+1])
+                                    elif isinstance(v, Sequence):
+                                        ctx[cmdargs[idx]].set(
+                                            int(cmdargs[idx]))
+                                else:
+                                    print('Invalid parameter name.')
+
                         elif cmd == 'zoom':
                             c = {'cmd': 'zoom'}
                             cq.put(c)
