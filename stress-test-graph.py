@@ -238,12 +238,27 @@ async def job_python_service_delete(args, ctx, rq):
     await sliding_window_executor(rq, default_task, data)
 
 
+async def job_devices_sync_from(args, ctx, rq):
+    ctx.update({
+        "id": SequenceRequest(0),
+        'stop': 1000
+    })
+    data = {
+        'host': args.host,
+        'op': 'action',
+        'url': '/tailf-ncs:devices/device=r<<id>>/sync-from',
+        'parameters': ctx
+    }
+    await sliding_window_executor(rq, default_task, data)
+
+
 jobs = {
     'model_a': job_model_a,
     'python_service_create': job_python_service_create,
     'python_service_list_create': job_python_service_list_create,
     'python_service_delete': job_python_service_delete,
     'python_service_update': None,  # job_model_update_python_service,
+    'devices-sync-from': job_devices_sync_from,
 }
 
 
