@@ -30,10 +30,14 @@ def parseArgs(cmd_args):
                         choices=['ios-cli', 'nx-cli', 'ios-xr', 'router'],
                         default='ios-cli',
                         help="Type of device")
+    parser.add_argument('--accept-out-of-sync',
+                        action='store_true', default=False,
+                        help="Device address")
     return parser.parse_args()
 
 
-def create_device(devices, name, address, port, t, nedid, authgrp):
+def create_device(devices, name, address, port, t, nedid, authgrp,
+                  accept_out_of_sync=False):
     device = devices.device
     dev = device.create(name)
     dev.address = address
@@ -44,6 +48,10 @@ def create_device(devices, name, address, port, t, nedid, authgrp):
         dev.device_type.netconf.ned_id = nedid
     dev.authgroup = authgrp
     dev.state.admin_state = "unlocked"
+    if accept_out_of_sync:
+        dev.out_of_sync_commit_behaviour = 'accept'
+    else:
+        dev.out_of_sync_commit_behaviour = 'reject'
 
 def main(args):
     n = 0
@@ -59,7 +67,8 @@ def main(args):
                 r = ncs.maagic.get_root(t)
                 dt, nedid = NEDIDs[args.type]
                 create_device(r.devices, f'{args.name}{n}', args.address,
-                                args.port+n, dt, nedid, 'default')
+                              args.port+n, dt, nedid, 'default',
+                              args.accept_out_of_sync)
                 n += 1
                 if n>=n_devices: break
             t.apply()
