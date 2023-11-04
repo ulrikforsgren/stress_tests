@@ -94,16 +94,21 @@ async def sliding_window_executor(q, task_function, data):
     try:
         tasks = set()
 
-        # Start initial n_p number of tasks
-        for _ in range(0, data['parameters']['n_p']):
-            tasks.add(asyncio.create_task(task_function(**data)))
-
         parameters = data['parameters']
         parameters['requests-count'] = 0
         stop = parameters.get('stop', 0)
+        req_count = 0
+        more_requests = True
 
-        stop_job = False
-        while not close_flag and not stop_job:
+        # Start initial n_p number of tasks
+        for _ in range(0, parameters['n_p']):
+            tasks.add(asyncio.create_task(task_function(**data)))
+            req_count += 1
+            if req_count >= stop:
+                more_requests = False
+                break
+
+        while not close_flag and len(tasks) > 0:
             done, tasks = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
             for d in done:
                 global_parameters['requests-count'] += 1
@@ -114,19 +119,20 @@ async def sliding_window_executor(q, task_function, data):
                     last_error = last_result
                 # Push results to graph_handler
                 q.put(result)
-                if stop > 0 and parameters['requests-count'] >= stop:
-                    stop_job = True
-                    break
-            if stop_job:
-                break
             # Start new tasks to keep a total of n_p number of tasks running.
             # Calculate number of free task slots
-            tasks_to_start = data['parameters']['n_p']-len(tasks)
-            if tasks_to_start > 0:
-                # Start tasks in available slots
-                for _ in range(0, tasks_to_start):
-                    tasks.add(asyncio.create_task(task_function(**data)))
+            if more_requests:
+                tasks_to_start = data['parameters']['n_p']-len(tasks)
+                if tasks_to_start > 0:
+                    # Start tasks in available slots
+                    for _ in range(0, tasks_to_start):
+                        tasks.add(asyncio.create_task(task_function(**data)))
+                        req_count += 1
+                        if req_count >= stop:
+                            more_requests = False
+                            break
     except asyncio.CancelledError:
+        # TODO: More graceful shutdown and collect results?
         pass
     except Exception as e:
         print("EXCEPTION", e)
