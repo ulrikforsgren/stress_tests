@@ -228,13 +228,6 @@ async def setup_connections(n_p, client, host):
     # await asyncio.wait(tasks)
 
 
-async def until_commit_queue_empty(client, host):
-    # create is used as a workaround for operations
-    await restconf_request(client, host, 'create',
-                           '/devices/commit-queue/wait-until-empty',
-                           resource_type='operations')
-
-
 #
 # n_p connections are setup for each batch then closed
 #
@@ -285,7 +278,6 @@ async def stress_requests_window(n, n_p, setup, teardown, task, args):
             pending.add(asyncio.create_task(task(**args)))
         n -= tasks_to_start
         tasks = pending
-    await until_commit_queue_empty(args['client'], args['host'])
     elapsed = time.monotonic()-st
     await teardown(args)
     return elapsed, results
@@ -380,17 +372,13 @@ def calc_average(results):
 
 
 def set_flags(args, req):
-    flags = ''
-
-    def add_flag(flags, flag):
-        if flags:
-            flags += '&'
-        flags += flag
-        return flags
+    flags = {}
     if args.no_networking:
-        flags = add_flag(flags, "no-networking")
+        flags['no-networking'] = 'true'
     if args.commit_queue:
-        flags = add_flag(flags, "commit-queue")
+        flags['commit-queue'] = 'sync'
+    if 'params' in req:
+        req['params'].update(flags)
     req['params'] = flags
 
 

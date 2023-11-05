@@ -233,7 +233,7 @@ async def job_python_service_list_create_no_networking(args, ctx, rq, extra_para
                     }
                 }''',
         'parameters': ctx,
-        'params': 'no-networking'
+        'params': {'no-networking': 'true'}
     }
     await sliding_window_executor(rq, default_task, data)
 
@@ -260,7 +260,34 @@ async def job_python_service_list_update_no_networking(args, ctx, rq, extra_para
                     }
                 }''',
         'parameters': ctx,
-        'params': 'no-networking'
+        'params': {'no-networking': 'true'}
+    }
+    await sliding_window_executor(rq, default_task, data)
+
+
+async def job_python_service_list_update_commit_queue(args, ctx, rq, extra_params={}):
+    ctx.update({
+        "id": SequenceRequest(0, wrap=1000),
+        "data": RandomValue(0, 4000000000),
+        "delay": 0,
+        "numvlan": 1
+    })
+    ctx.set(extra_params)
+    data = {
+        'host': args.host,
+        'op': 'update',
+        'url': '/python-service:python-service/service=K<<id>>',
+        'data': '''{
+                    "service":{
+                        "delay": <<delay>>,
+                        "template": "vlans",
+                        "device": "r<<id>>",
+                        "num-vlan": <<numvlan>>,
+                        "str-value": "<<data>>"
+                    }
+                }''',
+        'parameters': ctx,
+        'params': {'commit-queue': 'sync'}
     }
     await sliding_window_executor(rq, default_task, data)
 
@@ -339,6 +366,7 @@ jobs = {
     'python_service_create': job_python_service_create,
     'python_service_list_create_no_networking': job_python_service_list_create_no_networking,
     'python_service_list_update_no_networking': job_python_service_list_update_no_networking,
+    'python_service_list_update_commit_queue': job_python_service_list_update_commit_queue,
     'python_service_list_update': job_python_service_list_update,
     'python_service_delete': job_python_service_delete,
     'python_service_update': None,  # job_model_update_python_service,
