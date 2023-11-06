@@ -14,15 +14,17 @@ import os.path as path
 from string import Template
 import sys
 
+
 def parseArgs(args):
     parser = argparse.ArgumentParser()
     parser.add_argument('result', type=str, nargs='+',
-            help='Result file to convert.')
+                        help='Result file to convert.')
     parser.add_argument('-t', type=str, default='',
-            help='Tag to include in header.')
+                        help='Tag to include in header.')
     parser.add_argument('-d', type=str,
-            help='Output directory. Default is same dir as the input file.')
+                        help='Output directory. Default is same dir as the input file.')
     return parser.parse_args(args)
+
 
 HEADER = """
 <!DOCTYPE html>
@@ -158,17 +160,20 @@ FOOTER = """
   </body> </html>
 """
 
+
 def addThroughputChart(f, title, data):
     f.write('var data =')
     f.write(json.dumps(data))
     f.write(';')
     f.write(f'CRUDChartThroughput("{title}", labels, data);')
 
+
 def addTimeChart(f, title, data):
     f.write('var data =')
     f.write(json.dumps(data))
     f.write(';')
     f.write(f'CRUDChartTime("{title}", labels, data);')
+
 
 def addDetailedChart(f, title, data):
     f.write('var data =')
@@ -178,74 +183,85 @@ def addDetailedChart(f, title, data):
 
 
 # Get a dict from a dict. Add if not found
-def get_dict(d,k):
+def get_dict(d, k):
     i = d.get(k)
     if i is None:
         d[k] = i = {}
     return i
 # Get a dict from a dict. Add if not found
-def get_list(d,k):
+
+
+def get_list(d, k):
     i = d.get(k)
     if i is None:
         d[k] = i = []
     return i
+
 
 def transform_crud_results(results):
     total_details = {}
     summary_rate = {}
     summary_avg = {}
     summary_labels = []
-    for res_p in results: # iterate over p
-        t,n,p,res_rtp = res_p
-        elapsed,n_success,_,avg,_,_,res_r = res_rtp
+    for res_p in results:  # iterate over p
+        t, n, p, res_rtp = res_p
+        elapsed, n_success, _, avg, _, _, res_r = res_rtp
         # Collect details
         data = []
         for r in res_r:
-            i,s,*rest = r
+            i, s, *rest = r
             if s == 'ok':
-                data.append(round(rest[2],6))
+                data.append(round(rest[2], 6))
             else:
                 data.append(None)
         d = get_dict(total_details, p)
         d[t] = data
         # Collect summary
-        if t == 'create': summary_labels.append(p)
-        get_list(summary_rate, t).append(round(n_success/elapsed,2))
-        get_list(summary_avg, t).append(round(avg,6))
+        if t == 'create':
+            summary_labels.append(p)
+        get_list(summary_rate, t).append(round(n_success/elapsed, 2))
+        get_list(summary_avg, t).append(round(avg, 6))
     return summary_labels, summary_rate, summary_avg, total_details
 
 
-def generate_html(args, name, oname):
-    results = json.load(open(name))
-    of = open(oname, 'w')
+def generate_html(output_filename, tag, title, results):
 
-    summary_labels, summary_rate, summary_avg, total_details = transform_crud_results(results)
+    summary_labels, summary_rate, summary_avg, total_details = transform_crud_results(
+        results)
 
-    space = '  ' if args.t else ''
     fields = {
-        'TAG': args.t +('  ' if args.t else ''),
-        'TITLE': name
+        'TAG': tag,
+        'TITLE': title
     }
+    of = open(output_filename, 'w')
     of.write(Template(HEADER).substitute(fields))
     of.write(BODY)
     of.write('var labels =')
     of.write(json.dumps(summary_labels))
     of.write(';')
-    addThroughputChart(of, 'Requests throughput with concurrent requests', summary_rate)
-    addTimeChart(of, 'Average request time with parallel requests', summary_avg)
+    addThroughputChart(
+        of, 'Requests throughput with concurrent requests', summary_rate)
+    addTimeChart(
+        of, 'Average request time with parallel requests', summary_avg)
     for p, details in total_details.items():
-        addDetailedChart(of, f"Individual request time with {p} concurrent requests", details)
+        addDetailedChart(
+            of, f"Individual request time with {p} concurrent requests", details)
     of.write(FOOTER)
+    of.close()
 
-data = {}
+
 def main(args):
+
     for result in args.result:
         dirs, fname = path.split(result)
         name, ext = path.splitext(fname)
         odirs = args.d or dirs
         oname = path.join(odirs, name+'.html')
-        generate_html(args, result, oname)
+        results = json.load(open(result))
+        generate_html(oname, args.t + ('  ' if args.t else ''),
+                      result, results)
         print(f"Created {oname}")
+
 
 if __name__ == '__main__':
     main(parseArgs(sys.argv[1:]))
