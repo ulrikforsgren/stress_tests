@@ -357,7 +357,7 @@ async def job_dummy(args, ctx, rq, extra_params=None):
     try:
         while not close_flag:
             ctx['requests-count'] += 1
-            await asyncio.sleep(1)
+            await asyncio.sleep(ctx['delay']/1000)
     except asyncio.CancelledError:
         pass
 
@@ -408,9 +408,12 @@ class DictKeyCompleter(Completer):
 
     def get_completions(self, document, complete_event):
         word = document.get_word_before_cursor()
-        for k in self.d.keys():
-            if k.startswith(word):
-                yield Completion(k, start_position=-len(word))
+        start = document.find_previous_word_beginning(1)
+        start2 = document.find_previous_word_beginning(2)
+        if start2 is None and not (start is not None and word == ''):
+            for k in self.d.keys():
+                if k.startswith(word):
+                    yield Completion(k, start_position=-len(word))
 
 
 class DictDictKeyCompleter(Completer):
@@ -447,7 +450,7 @@ commands = {
         'completed': DictKeyCompleter(completed_jobs)
     }, "Show job parameters."),
     "set": ({
-            'global': None,
+            'global': DictKeyCompleter(global_parameters),
             'job': DictDictKeyCompleter(running_jobs)
             }, "Set job parameters."),
     "jobs": (None, "Show running jobs."),
@@ -558,11 +561,12 @@ async def command_handler(args, rq, cq):
                             if idx:
                                 if cmdargs[idx] in ctx:
                                     v = ctx[cmdargs[idx]]
-                                    if v is int:
+                                    if type(v) is int:
                                         ctx[cmdargs[idx]] = int(cmdargs[idx+1])
-                                    elif v is str:
+                                        print(ctx[cmdargs[idx]])
+                                    elif type(v) is str:
                                         ctx[cmdargs[idx]] = cmdargs[idx+1]
-                                    elif v is float:
+                                    elif type(v) is float:
                                         ctx[cmdargs[idx]] = float(
                                             cmdargs[idx+1])
                                     elif isinstance(v, Sequence):
@@ -643,7 +647,7 @@ def graph_handler(args, rq, cq):
         close_flag = 1
 
     plt.ion()
-    figure = plt.figure('Transactional Throughput Stress Test', figsize=(4, 3))
+    figure = plt.figure('Transactional Throughput Stress Test', figsize=(9, 6))
     figure.canvas.mpl_connect('close_event', handle_close)
     ax = figure.add_subplot()
     ax.set_title('RESTCONF requests throughput')
