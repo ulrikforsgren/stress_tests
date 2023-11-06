@@ -5,13 +5,18 @@ import argparse
 import asyncio
 import copy
 import json
+import os
+import os.path as path
 import pprint as pp
 import random
 import re
+import sys
 import time
 from xmlrpc.client import boolean
 
 from .restconf_api import REQ_DISPATCH, setup, teardown, restconf_request
+from .gen_chart import generate_html
+
 
 HOST = 'localhost'
 PORT = 8080
@@ -41,18 +46,16 @@ def parseArgs(args, extra_actions=[]):
     parser.add_argument('cmd', nargs='+', choices=['clean', 'create', 'read',
                                                    'update', 'delete', 'crud', 'cud']
                         + extra_actions)
+    parser.add_argument("--single", required=False, action='store_true', default=False,
+                        help="Run one iteration of one operation with one windows size.")
     parser.add_argument("-n", required=False, type=int,
                         help='Number of total requests.')
-    parser.add_argument("-o", required=False, action='store_true', default=False,
-                        help="Run only one test instead of a sequence of tests")
-    parser.add_argument("-b", required=False, type=int,
-                        help='Max batch size. Starting 1, 2, 5, .., max')
+    parser.add_argument("-w", required=False, type=int, default=40,
+                        help='Max window size. Starting 1, 2, 5, .., max')
     parser.add_argument("-s", required=False, type=str,
-                        help='Batch size(s) comma sepated.')
+                        help='Window size(s) comma sepated.')
     parser.add_argument("-p", required=False, type=str, action='append',
                         help='Alter parameters.')
-    parser.add_argument("--single", required=False, action='store_true',
-                        default=False, help='Run single test.')
     parser.add_argument("--no-networking", required=False, action='store_true',
                         default=False, help='Commit with no-networking.')
     parser.add_argument("--commit-queue", required=False, action='store_true',
@@ -61,11 +64,22 @@ def parseArgs(args, extra_actions=[]):
                         default=False, help='Silent mode.')
     parser.add_argument("-v", required=False, action='store_true',
                         default=False, help='Verbose mode. Show result of each request.')
-    parser.add_argument("--json", required=False, type=str,
+    parser.add_argument("-o", required=False, type=str,
                         help='Output result in json format to file.')
+    parser.add_argument("--html", required=False, action='store_true',
+                        help='Output results as graphs in html.')
+    parser.add_argument("--open", required=False, action='store_true',
+                        help='Open generated html.')
     parser.add_argument("--highlight", required=False, action='store_true',
                         default=False, help='Highlight output to make it more readable.')
     return parser.parse_args(args)
+
+
+# Function to replace any of the characters in the string s with the character c
+def replace_chars(s, c, chars):
+    for ch in chars:
+        s = s.replace(ch, c)
+    return s
 
 
 #
@@ -432,8 +446,8 @@ def run_tests(which, args, tests, n, max_p, task=None, do_print=False):
     n = args.n or n
 
     max_p = min(max_p, n)
-    if args.b:
-        max_p = min(args.b, n)
+    if args.w:
+        max_p = min(args.w, n)
 
     if not args.s:
         n_ps = [n for n in np_gen(max_p)]
@@ -471,8 +485,19 @@ def run_tests(which, args, tests, n, max_p, task=None, do_print=False):
                 args, do_test, n, n_p, req, task, do_print)))
         if args.highlight and r % 2 == 1:
             print(ansi.RST, end='')
-    if args.json:
-        open(args.json, "w").write(json.dumps(results))
+    if args.o:
+        open(args.o, "w").write(json.dumps(results))
+    if args.html:
+        dirs, fname = path.split(sys.argv[0])
+        name, ext = path.splitext(fname)
+        oname = f'{name}-{args.n}-{args.p}-{args.w}-{args.s}.html'
+        oname = replace_chars(oname, '_', ',=')
+        generate_html(oname, '', oname, results)
+        print()
+        print("Wrote html file:", oname)
+        if args.open:
+            import webbrowser
+            webbrowser.open(f'file://{path.join(os.getcwd(), oname)}')
     return results
 
 
@@ -482,7 +507,7 @@ def run_crud_tests(args, tests, n, max_p, task=None, do_print=False):
 
 def run_single_test(tc, args, tests, task=None):
     n = args.n or 1
-    n_p = args.b or 1
+    n_p = args.w or 1
     req = tests[tc]
     req['host'] = args.host
     elapsed, count, total, count_wrong, count_exc, results = do_test(
@@ -517,7 +542,7 @@ def run_test(args, tests, n=500, max_p=50, task=None, do_print=True):
             else:
                 tc.append(c)
 
-        if args.o:
+        if args.single:
             run_single_test(tc[0], args, tests, task=task)
         else:
             run_tests(tc, args, tests, n, max_p, task, do_print)
