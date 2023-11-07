@@ -126,8 +126,9 @@ async def sliding_window_executor(q, task_function, data):
                 last_result = (datetime.now().isoformat(), result)
                 if result[1] != 'ok':
                     last_error = last_result
-                # Push results to graph_handler
-                q.put(result)
+                if parameters['add_to_graph']:
+                    # Push results to graph_handler
+                    q.put(result)
             # Start new tasks to keep a total of n_p number of tasks running.
             # Calculate number of free task slots
             if more_requests:
@@ -160,9 +161,10 @@ async def sliding_window_executor(q, task_function, data):
 #       they are passed by reference.
 global_parameters = {
     'host': 'localhost:8080',
-    'n_p': 20,
+    'n_p': 1,
     'delay': 0,
-    'requests-count': 0
+    'requests-count': 0,
+    'add_to_graph': 1,
 }
 
 
@@ -215,7 +217,7 @@ async def job_python_service_list_create_no_networking(args, ctx, rq, extra_para
         "data": RandomValue(0, 4000000000),
         "delay": 0,
         "numvlan": 1,
-        "stop": 1
+        "stop": 1000
     })
     ctx.set(extra_params)
     data = {
@@ -576,7 +578,8 @@ async def command_handler(args, rq, cq):
                                     print('Invalid parameter name.')
 
                         elif cmd == 'zoom':
-                            c = {'cmd': 'zoom'}
+                            c = {'cmd': 'zoom', 'y': (
+                                int(cmdargs[0]) if len(cmdargs) > 0 else 0)}
                             cq.put(c)
                             cq.join()
                         elif cmd == 'clear':
@@ -702,7 +705,10 @@ def graph_handler(args, rq, cq):
         try:
             c = cq.get(block=False)
             if c['cmd'] == 'zoom':
-                maxy = int(max(max(y), max(y2))*1.2)
+                if c['y'] == 0:
+                    maxy = int(max(max(y), max(y2))*1.2)
+                else:
+                    maxy = c['y']
                 if maxy == 0:
                     maxy = 100
                 plt.axis([0, 300, 0, maxy])
