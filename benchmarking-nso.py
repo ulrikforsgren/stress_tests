@@ -164,7 +164,8 @@ global_parameters = {
     'n_p': 1,
     'delay': 0,
     'requests-count': 0,
-    'add_to_graph': 1,
+    'add_to_graph': 1,  # Add data to graph
+    'stop': 0  # Run job until stopped
 }
 
 
@@ -565,7 +566,6 @@ async def command_handler(args, rq, cq):
                                     v = ctx[cmdargs[idx]]
                                     if type(v) is int:
                                         ctx[cmdargs[idx]] = int(cmdargs[idx+1])
-                                        print(ctx[cmdargs[idx]])
                                     elif type(v) is str:
                                         ctx[cmdargs[idx]] = cmdargs[idx+1]
                                     elif type(v) is float:
