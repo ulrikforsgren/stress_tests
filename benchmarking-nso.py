@@ -335,6 +335,60 @@ async def job_python_service_delete(args, ctx, rq, extra_params={}):
     await sliding_window_executor(rq, default_task, data)
 
 
+async def job_vrouter_service_create(args, ctx, rq, extra_params={}):
+    ctx.update({
+        "id": SequenceRequest(0),
+        "data": RandomValue(0, 4000000000),
+        "delay": 0,
+        "stop": 1000
+    })
+    ctx.set(extra_params)
+    data = {
+        'host': ctx['host'],
+        'op': 'create',
+        'url': '/vrouter:vrouter',
+        'data': '''{
+                    "service":{
+                        "name": "K<<id>>",
+                        "delay": <<delay>>,
+                        "template": "vlans",
+                        "device": "r<<id>>",
+                        "str-value": "<<data>>",
+                        "num-vlan": 1
+                    }
+                }''',
+        'parameters': ctx
+    }
+    await sliding_window_executor(rq, default_task, data)
+
+
+async def job_vrouter_service_update_no_networking(args, ctx, rq, extra_params={}):
+    ctx.update({
+        "id": SequenceRequest(0, wrap=1000),
+        "data": RandomValue(0, 4000000000),
+        "delay": 0,
+        "numvlan": 1
+    })
+    ctx.set(extra_params)
+    data = {
+        'host': args.host,
+        'op': 'update',
+        'url': '/vrouter:vrouter/service=K<<id>>',
+        'data': '''{
+                    "service":{
+                        "delay": <<delay>>,
+                        "template": "vlans",
+                        "device": "r<<id>>",
+                        "num-vlan": <<numvlan>>,
+                        "str-value": "<<data>>"
+                    }
+                }''',
+        'parameters': ctx,
+        'params': {'no-networking': 'true'}
+    }
+    await sliding_window_executor(rq, default_task, data)
+
+
 async def job_devices_sync_from(args, ctx, rq, extra_params=None):
     ctx.update({
         "id": SequenceRequest(0),
@@ -371,6 +425,8 @@ jobs = {
     'python_service_list_update_no_networking': job_python_service_list_update_no_networking,
     'python_service_list_update_commit_queue': job_python_service_list_update_commit_queue,
     'python_service_list_update': job_python_service_list_update,
+    'vrouter_service_create': job_vrouter_service_create,
+    'vrouter_service_update_no_networking': job_vrouter_service_update_no_networking,
     'python_service_delete': job_python_service_delete,
     'python_service_update': None,  # job_model_update_python_service,
     'devices-sync-from': job_devices_sync_from,
