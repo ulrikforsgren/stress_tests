@@ -16,7 +16,6 @@ class ServiceCallbacks(Service):
         time.sleep(service.delay/1000)
         vars = ncs.template.Variables()
         for t in service.template:
-            #vars.add('DUMMY', '127.0.0.1')
             template = ncs.template.Template(service)
             template.apply(t, vars)
 

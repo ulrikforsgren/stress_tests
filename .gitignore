@@ -21,3 +21,8 @@ pkg-repo/**/build-meta-data.xml
 pkg-repo/BUILT
 SINGLE-BUILD
 README.ncs
+reference_tests/
+oe/
+results/
+rollback/
+test-results/

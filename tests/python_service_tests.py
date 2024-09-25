@@ -34,37 +34,37 @@ CRUD_TESTS = {
         {
             'op': 'create',
             'url': '/python-service:python-service',
-            'data': '''{{
-                        "service":{{
-                            "name":"K{id}",
-                            "delay":{delay},
-                            "str-value":"String data {id}"
-                        }}
-                    }}''',
+            'data': '''{
+                        "service":{
+                            "name":"K<<id>>",
+                            "delay":<<delay>>,
+                            "str-value":"String data <<id>>"
+                        }
+                    }''',
             'parameters': parameters
         },
     'read':
         {
             'op': 'read',
-            'url': '/python-service:python-service/python-service:service=K{id}',
+            'url': '/python-service:python-service/python-service:service=K<<id>>',
             'parameters': parameters
         },
     'update':
         {
             'op': 'update',
-            'url': '/python-service:python-service/python-service:service=K{id}',
-            'data': '''{{
-                        "service":{{
-                            "delay":{delay},
-                            "str-value":"Changed string data {data}"
-                        }}
-                    }}''',
+            'url': '/python-service:python-service/python-service:service=K<<id>>',
+            'data': '''{
+                        "service":{
+                            "delay":<<delay>>,
+                            "str-value":"Changed string data <<data>>"
+                        }
+                    }''',
             'parameters': parameters
         },
     'delete':
         {
             'op': 'delete',
-            'url': '/python-service:python-service/python-service:service=K{id}',
+            'url': '/python-service:python-service/python-service:service=K<<id>>',
             'parameters': parameters
         }
 }

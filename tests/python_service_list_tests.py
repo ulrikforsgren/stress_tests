@@ -34,55 +34,59 @@ CRUD_TESTS = {
     're-deploy':
         {
             'op': 'action',
-            'url': '/python-service:python-service/python-service:service=K{id}/re-deploy',
-            'data': '''{{
-                    "input" : {{
-                        "dry-run":  {{}}
-                    }}
-                }}''',
+            'url':
+            '/python-service:python-service/python-service:service=K<<id>>/re-deploy',
+            'data': '''{
+                    "input" : {
+                        "dry-run":  {}
+                    }
+                }''',
             'parameters': parameters
         },
     'create':
         {
             'op': 'create',
             'url': '/python-service:python-service',
-            'data': '''{{
-                        "service":{{
-                            "name":"K{id}",
-                            "delay":{delay},
-                            "device":"r{id}",
+            'data': '''{
+                        "service":{
+                            "name":"K<<id>>",
+                            "delay":<<delay>>,
+                            "device":"r<<id>>",
                             "template":"vlans",
-                            "str-value":"String data {id}",
-                            "num-vlan":{numvlan}
-                        }}
-                    }}''',
+                            "str-value":"String data <<id>>",
+                            "num-vlan":<<numvlan>>
+                        }
+                    }''',
             'parameters': parameters
         },
     'read':
         {
             'op': 'read',
-            'url': '/python-service:python-service/python-service:service=K{id}',
+            'url':
+            '/python-service:python-service/python-service:service=K<<id>>',
             'parameters': parameters
         },
     'update':
         {
             'op': 'update',
-            'url': '/python-service:python-service/python-service:service=K{id}',
-            'data': '''{{
-                        "service":{{
-                            "delay":{delay},
-                            "device":"r{id}",
+            'url':
+            '/python-service:python-service/python-service:service=K<<id>>',
+            'data': '''{
+                        "service":{
+                            "delay":<<delay>>,
+                            "device":"r<<id>>",
                             "template":"vlans",
-                            "str-value":"Changed string data {data}",
-                            "num-vlan":{numvlan}
-                        }}
-                    }}''',
+                            "str-value":"Changed <<id>>",
+                            "num-vlan":<<numvlan>>
+                        }
+                    }''',
             'parameters': parameters
         },
     'delete':
         {
             'op': 'delete',
-            'url': '/python-service:python-service/python-service:service=K{id}',
+            'url':
+            '/python-service:python-service/python-service:service=K<<id>>',
             'parameters': parameters
         }
 }
