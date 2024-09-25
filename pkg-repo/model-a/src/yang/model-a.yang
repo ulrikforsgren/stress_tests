@@ -13,6 +13,10 @@ module model-a {
       leaf str-value {
         type string;
       }
+
+      leaf int-value {
+        type uint64;
+      }
     }
   }
 }

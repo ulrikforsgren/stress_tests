@@ -10,6 +10,7 @@ import os.path as path
 import pprint as pp
 import random
 import re
+import rstr
 import sys
 import time
 from xmlrpc.client import boolean
@@ -38,7 +39,7 @@ class ansi:
     RED = '\033[91m'
 
 
-def parseArgs(args, extra_actions=[]):
+def parseArgs(args=None, extra_actions=[]):
     parser = argparse.ArgumentParser()
     parser.add_argument('--host', type=str,
                         help='host[:port]',
@@ -46,6 +47,12 @@ def parseArgs(args, extra_actions=[]):
     parser.add_argument('cmd', nargs='+', choices=['clean', 'create', 'read',
                                                    'update', 'delete', 'crud', 'cud']
                         + extra_actions)
+    parser.add_argument("--dry-run", required=False, action='store_true', default=False,
+                        help="Run sequence but do not send request over network.")
+    parser.add_argument("--echo", required=False, action='store_true', default=False,
+                        help="Echo request to console.")
+    parser.add_argument("--keep-state", required=False, action='store_true', default=False,
+                        help="Loads state if state files exist and saves after run.")
     parser.add_argument("--single", required=False, action='store_true', default=False,
                         help="Run one iteration of one operation with one windows size.")
     parser.add_argument("-n", required=False, type=int,
@@ -82,6 +89,18 @@ def replace_chars(s, c, chars):
     return s
 
 
+def json_to_tuple(json_str):
+    def convert(obj):
+        if isinstance(obj, list):
+            return tuple(convert(item) for item in obj)
+        elif isinstance(obj, dict):
+            return {key: convert(value) for key, value in obj.items()}
+        else:
+            return obj
+
+    return convert(json.loads(json_str))
+
+
 #
 # Classes to inject dynamic values for stressing requests.
 #
@@ -100,21 +119,22 @@ parameters = Parameters({
 })
 """
 
+# TODO: Fix how __repr__, __str__ and current are used.
+class Parameter:
+    def __init__(self, keep_state=False):
+        self.keep_state = keep_state
 
-class Sequence:
-    def __init__(self, n):
-        self.n = n
+    def getstate(self):
+        raise NotImplementedError()
 
-    def set(self, n):
-        self.n = n
+    def setstate(self, state):
+        raise NotImplementedError()
 
-    def __str__(self):
-        s = str(self.n)
-        self.update_str()
-        return s
+    def set(self, *args):
+        pass
 
     def update_str(self):
-        self.n += 1
+        pass
 
     def update_request(self):
         pass
@@ -122,7 +142,48 @@ class Sequence:
     def update_batch(self):
         pass
 
-    def __copy__(self):
+    def reset(self):
+        pass
+
+    def current(self):
+        return None
+    
+
+class Sequence(Parameter):
+    def __init__(self, n, wrap=None, keep_state=False):
+        super().__init__(keep_state)
+        self.n = n
+        self.wrap = wrap
+
+    def getstate(self):
+        return self.n
+
+    def setstate(self, state):
+        self.n = state
+
+    def set(self, n):
+        if isinstance(n, str):
+            n = int(n)
+        self.n = n
+
+    def __str__(self):
+        s = str(self.n)
+        return s
+
+    def update_str(self):
+        s = str(self)
+        self.n += 1
+        if self.wrap is not None:
+            self.n = self.n % self.wrap
+        return s
+
+    def update_request(self):
+        pass
+
+    def update_batch(self):
+        pass
+
+    def __deepcopy__(self, memo):
         return self.__class__(self.n)
 
     def reset(self):
@@ -133,12 +194,11 @@ class Sequence:
 
 
 class SequenceRequest(Sequence):
-    def __init__(self, n, wrap=None):
-        super(SequenceRequest, self).__init__(n)
-        self.wrap = wrap
+    def __init__(self, n, wrap=None, keep_state=False):
+        super().__init__(n, wrap, keep_state)
 
     def update_str(self):
-        pass
+        return str(self)
 
     def update_request(self):
         self.n += 1
@@ -149,9 +209,38 @@ class SequenceRequest(Sequence):
         return f'SequenceRequest(n={self.n}, wrap={self.wrap})'
 
 
+class SequenceRequestRandomized(SequenceRequest):
+    def __init__(self, n, wrap=None, seed=None, keep_state=False):
+        super().__init__(0, wrap, keep_state)
+        self.length = n
+        self.seed = seed
+        self.rnd = random.Random(seed)
+        self.sequence = list(range(self.length))
+        self.rnd.shuffle(self.sequence)
+
+    def getstate(self):
+        return (self.n, self.sequence)
+
+    def setstate(self, state):
+        # NOTE: This will restore the sequence as a tuple and will be immutable.
+        # NOTE: The random generator state is not restored.
+        self.n, self.sequence = state
+
+    def __str__(self):
+        try:
+            return str(self.sequence[self.n])
+        except IndexError:
+            return "No more values ({self.n})"
+    
+    def update_str(self):
+        return str(self.sequence[self.n])
+
+    def current(self):
+        return f'SequenceRequestRandomized(n={self.n}, wrap={self.wrap})'
+
 class SequenceBatch(Sequence):
-    def __init__(self, n):
-        super(SequenceBatch, self).__init__(n)
+    def __init__(self, n, keep_state=False):
+        super().__init__(n, keep_state)
 
     def update_str(self):
         pass
@@ -160,17 +249,68 @@ class SequenceBatch(Sequence):
         self.n += 1
 
 
-class RandomValue(Sequence):
-    def __init__(self, lower, upper):
-        super(RandomValue, self).__init__(0)
+class RandomParameter(Parameter):
+    def __init__(self, seed=None, keep_state=False):
+        super().__init__(keep_state)
+        self.seed = seed
+        self.rnd = random.Random(seed)
+
+    def getstate(self):
+        return self.rnd.getstate()
+
+    def setstate(self, state):
+        self.rnd.setstate(state)
+
+
+class RandomValue(RandomParameter):
+    def __init__(self, lower, upper, seed=None, keep_state=False):
+        super().__init__(seed, keep_state)
         self.lower = lower
         self.upper = upper
 
+    def __deepcopy__(self, memo):
+        return self.__class__(self.lower, self.upper, self.seed)
+    
     def __str__(self):
         return str(random.randint(self.lower, self.upper))
 
     def current(self):
         return f'RandomValue({self.lower}..{self.upper})'
+
+
+class RandomString(RandomParameter):
+    def __init__(self, length, seed=None, keep_state=False):
+        super().__init__(seed, keep_state)
+        self.length = length
+        self.rstr = rstr.Rstr(self.rnd)
+        self.value = self.rstr.letters(self.length)
+
+    def getstate(self):
+        return (super().getstate(), self.value)
+
+    def setstate(self, state):
+        state, self.value = state
+        super().setstate(state)
+
+    def set(self, n):
+        # NOTE: This is a hack to allow changing the length of the string, but it breaks the pseudo random sequence.
+        if isinstance(n, str):
+            n = int(n)
+        self.length = n
+
+    def update_str(self):
+        s = self.value
+        self.value = self.rstr.letters(self.length)
+        return s
+
+    def __deepcopy__(self, memo):
+        return self.__class__(self.length, self.seed)
+
+    def __str__(self):
+        return self.value
+
+    def current(self):
+        return f'RandomString(length={self.length})'
 
 
 """
@@ -180,11 +320,18 @@ url and data strings.
 
 
 class Parameters(dict):
+    def __str__(self):
+        s = 'Parameters {\n'
+        for k, v in self.items():
+            s += f'    {k}: {v}\n'
+        s += '}'
+        return s
+    
     def set(self, d):
         for k, v in d.items():
             if k in self:
                 ov = self[k]
-                if isinstance(ov, Sequence):
+                if isinstance(ov, Parameter):
                     ov.set(v)
                 elif ov is int:
                     self[k] = int(v)
@@ -219,10 +366,38 @@ class Parameters(dict):
         else:
             raise TypeError(f'Invalid type: {type(cmd_p)}')
 
+    def update(self, kv):
+        for k,v in kv.items():
+            if isinstance(self[k], Parameter):
+                self[k].set(v)
+
     def reset(self):
         for v in self.values():
-            if isinstance(v, Sequence):
+            if isinstance(v, Parameter):
                 v.reset()
+
+    def save_state(self):
+        for k,v in self.items():
+            if isinstance(v, Parameter) and v.keep_state:
+                with open(f'{k}.state', 'w') as f:
+                    f.write(json.dumps(v.getstate()))
+
+    def load_state(self):
+        n = 0
+        s = 0
+        for k,v in self.items():
+            if isinstance(v, Parameter) and v.keep_state:
+                n += 1
+                try:
+                    with open(f'{k}.state', 'r') as f:
+                        v.setstate(json_to_tuple(f.read()))
+                        s += 1
+                except FileNotFoundError:
+                    pass
+        if s and n != s:
+            print(f'ERROR: Inconsistent states. Loaded {s} of {n} states. Remove state files to start fresh.')
+            sys.exit(1)
+
 
 
 def number_of_open_connections(conn):
@@ -233,31 +408,30 @@ def number_of_open_connections(conn):
         return 0
 
 
-async def setup_connections(n_p, client, host):
-    # Run n_p tasks in parallel to force client to setup n_p connections
-    # This to remove the initial connection time from the results
-    tasks = [asyncio.create_task(setup_task(client, host))
-             for p in range(0, n_p)]
-    await asyncio.gather(*tasks)
-    # await asyncio.wait(tasks)
+#async def setup_connections(args, n_p, client, host):
+#    # Run n_p tasks in parallel to force client to setup n_p connections
+#    # This to remove the initial connection time from the results
+#    tasks = [asyncio.create_task(setup_task(args, client, host))
+#             for p in range(0, n_p)]
+#    await asyncio.gather(*tasks)
+#    # await asyncio.wait(tasks)
 
 
 #
 # n_p connections are setup for each batch then closed
 #
-async def stress_requests_batch(n, n_p, setup, teardown, task, args):
+async def stress_requests_batch(args, n, n_p, setup, teardown, task, req, parameters):
     results = []
     while n > 0:  # Execute requests in batches of n_p in parellel.
         if n < n_p:
             n_p = n
-        await setup(args)
+        await setup(req)
         st = time.monotonic()
-        tasks = [asyncio.create_task(task(**args))
+        tasks = [asyncio.create_task(task(args, parameters, **req))
                  for p in range(0, n_p)]
         results += await asyncio.gather(*tasks)
-        await teardown(args)
-        if 'parameters' in args:
-            args['parameters'].update_batch()
+        await teardown(req)
+        parameters.update_batch()
         n -= n_p
     elapsed = time.monotonic()-st
     return elapsed, results
@@ -268,17 +442,17 @@ async def stress_requests_batch(n, n_p, setup, teardown, task, args):
 #
 
 
-async def stress_requests_window(n, n_p, setup, teardown, task, args):
+async def stress_requests_window(args, n, n_p, setup, teardown, task, req, parameters):
     results = []
     tasks = set()
-
-    await setup(args)
-    conn = args['client']._connector
-    await conn.setup_pool_connections(conn, args['host'], n_p)
+    await setup(req)
+    conn = req['client']._connector
+    if not args.dry_run:
+        await conn.setup_pool_connections(conn, req['host'], n_p)
 
     st = time.monotonic()
     for _ in range(0, min(n, n_p)):
-        tasks.add(asyncio.create_task(task(**args)))
+        tasks.add(asyncio.create_task(task(args, parameters, **req)))
     n -= min(n, n_p)  # Started initial tasks
 
     while len(tasks) > 0:
@@ -289,29 +463,29 @@ async def stress_requests_window(n, n_p, setup, teardown, task, args):
         a = n_p-len(pending)  # Calculate number of free task slots
         tasks_to_start = min(a, n)
         for _ in range(0, tasks_to_start):  # Start tasks in available slots
-            pending.add(asyncio.create_task(task(**args)))
+            pending.add(asyncio.create_task(task(args, parameters, **req)))
         n -= tasks_to_start
         tasks = pending
     elapsed = time.monotonic()-st
-    await teardown(args)
+    await teardown(req)
     return elapsed, results
 
 
-async def single_request(args, setup=setup, teardown=teardown):
+async def single_request(args, req, parameters, setup=setup, teardown=teardown):
     # Setup connection pool
-    await setup(args)
-    result = await default_task(**args)
+    await setup(req)
+    result = await default_task(args, parameters, **req)
     # Cleanup connection pool
     await teardown(args)
     return result
 
 
-async def setup_task(client, host):
+async def setup_task(args, client, host):
     # Reading an arbitrary leaf to force the client to setup a connection.
     url = '/tailf-ncs:devices/global-settings/read-timeout'
     op = 'read'
     st = time.monotonic()
-    resp = await restconf_request(client,
+    resp = await restconf_request(args, client,
                                   host,
                                   op,
                                   url)
@@ -322,13 +496,19 @@ async def setup_task(client, host):
 re_sub = re.compile(r'<<(\w+)>>')
 
 
-async def default_task(client=None, parameters=Parameters(), host='', op='',
+async def default_task(args, parameters, client=None, host='', op='',
                        url='', data='', resource_type='data', params=None):
-    url = re_sub.sub(lambda m: str(parameters[m.group(1)]), url)
-    data = re_sub.sub(lambda m: str(parameters[m.group(1)]), data)
+    def update_str(key):
+        p = parameters[key]
+        if isinstance(p, Parameter):
+            return p.update_str()
+        return str(p)
+    url = re_sub.sub(lambda m: update_str(m.group(1)), url)
+    data = re_sub.sub(lambda m: update_str(m.group(1)), data)
     parameters.update_request()
     st = time.monotonic()
-    resp = await restconf_request(client,
+    resp = await restconf_request(args,
+                                  client,
                                   host,
                                   op,
                                   url,
@@ -396,11 +576,11 @@ def set_flags(args, req):
     req['params'] = flags
 
 
-def do_test(args, n, n_p, req, task=None):
+def do_test(args, n, n_p, req, parameters, task=None):
     task = task or default_task
     set_flags(args, req)
     elapsed, results = asyncio.run(
-        stress_requests_window(n, n_p, setup, teardown, task, req))
+        stress_requests_window(args, n, n_p, setup, teardown, task, req, parameters))
 
     if args.v:
         pprint(results)
@@ -413,9 +593,10 @@ def do_test(args, n, n_p, req, task=None):
 #
 # Run test in subprocess to ensure proper cleanup between test iterations.
 #
-def run_test_in_subprocess(args, func, n, n_p, req, task=None, do_print=False):
+def run_test_in_subprocess(args, func, n, n_p, req, parameters, task=None, do_print=False):
     req = copy.deepcopy(req)
-    result = func(args, n, n_p, req, task)
+    params = copy.deepcopy(parameters)
+    result = func(args, n, n_p, req, params, task)
     elapsed, count, total, count_wrong, count_exc, results = result
     if count:
         average = total/count
@@ -442,7 +623,7 @@ def np_gen(max_p):
         m *= 10
 
 
-def run_tests(which, args, tests, n, max_p, task=None, do_print=False):
+def run_tests(args, which, tests, parameters, n, max_p, task=None, do_print=False):
     n = args.n or n
 
     max_p = min(max_p, n)
@@ -455,15 +636,11 @@ def run_tests(which, args, tests, n, max_p, task=None, do_print=False):
         n_ps = list(map(int, args.s.split(',')))
 
     print()
+    parameters.update_cmdline(args.p)
     if '__info' in tests:
         info = tests['__info']
         if 'name' in info:
-            if 'parameters' in info:
-                params = info['parameters']
-                params.update_cmdline(args.p)
-            else:
-                params = {}
-            name = info['name'].format_map(params)
+            name = info['name'].format_map(parameters)
             if args.highlight:
                 print(ansi.BOLD, end='')
                 print(ansi.REVERSE, end='')
@@ -479,10 +656,8 @@ def run_tests(which, args, tests, n, max_p, task=None, do_print=False):
         for op in which:
             req = tests[op]
             req['host'] = args.host
-            if 'parameters' in req:
-                req['parameters'].update_cmdline(args.p)
             results.append((op, n, n_p, run_test_in_subprocess(
-                args, do_test, n, n_p, req, task, do_print)))
+                args, do_test, n, n_p, req, parameters, task, do_print)))
         if args.highlight and r % 2 == 1:
             print(ansi.RST, end='')
     if args.o:
@@ -501,22 +676,30 @@ def run_tests(which, args, tests, n, max_p, task=None, do_print=False):
     return results
 
 
-def run_crud_tests(args, tests, n, max_p, task=None, do_print=False):
+def run_crud_tests(args, tests, parameters, n, max_p, task=None, do_print=False):
     return run_tests(['create', 'read', 'update', 'delete'], args, tests, n, max_p, task, do_print)
 
 
-def run_single_test(tc, args, tests, task=None):
+def run_single_test(args, tc, tests, parameters, task=None):
     n = args.n or 1
     n_p = args.w or 1
     req = tests[tc]
     req['host'] = args.host
+    if args.keep_state:
+        parameters.load_state()
+    parameters.update_cmdline(args.p)
+    if args.echo:
+        print(str(parameters))
     elapsed, count, total, count_wrong, count_exc, results = do_test(
-        args, n, n_p, req, task)
+        args, n, n_p, req, parameters, task)
     if count:
         average = total/count
     else:
         average = -1
-
+    if args.echo:
+        print(str(parameters))
+    if args.keep_state:
+        parameters.save_state()
     if not args.q:
         print()
         print("Total time:         ", elapsed)
@@ -529,9 +712,9 @@ def run_single_test(tc, args, tests, task=None):
     return (args.cmd, n, n_p, (elapsed, count, total, average, count_wrong, count_exc, results))
 
 
-def run_test(args, tests, n=500, max_p=50, task=None, do_print=True):
+def run_test(args, tests, parameters, n=500, max_p=50, task=None, do_print=True):
     if args.cmd == 'clean':
-        run_single_test('clean', args, tests)
+        run_single_test(args, 'clean', tests, parameters)
     else:
         tc = []
         for c in args.cmd:
@@ -543,6 +726,6 @@ def run_test(args, tests, n=500, max_p=50, task=None, do_print=True):
                 tc.append(c)
 
         if args.single:
-            run_single_test(tc[0], args, tests, task=task)
+            run_single_test(args, tc[0], tests, parameters, task=task)
         else:
-            run_tests(tc, args, tests, n, max_p, task, do_print)
+            run_tests(args, tc, tests, parameters, n, max_p, task, do_print)

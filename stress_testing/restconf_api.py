@@ -55,29 +55,35 @@ async def teardown(ctx):
 request_id = 0
 
 
-async def restconf_request(client, host, op, resource, data=None,
+async def restconf_request(args, client, host, op, resource, data=None,
                            resource_type='data', params=None):
     global request_id
     request_id += 1
     rid = request_id
     method, expected_status = REQ_DISPATCH[op]
     url = f'http://{host}/restconf/{resource_type}{resource}'
-    try:
-        if data is not None:
-            data = data.encode('utf-8')
-        async with client.request(method, url, headers=HEADERS_JSON,
-                                  data=data, params=params) as response:
-            if response.status in [201, 204]:
-                data = None  # No content is expected.
-            else:
-                if response.headers['Content-Type'] == 'application/yang-data+json':
-                    data = await response.json()
+    if args.echo:
+        print(f'{rid}: {method} {url}')
+        if data: print(f'{rid}: {data}')
+    if not args.dry_run:
+        try:
+            if data is not None:
+                data = data.encode('utf-8')
+            async with client.request(method, url, headers=HEADERS_JSON,
+                                    data=data, params=params) as response:
+                if response.status in [201, 204]:
+                    data = None  # No content is expected.
                 else:
-                    data = await response.text()
-            res = 'ok' if response.status in expected_status else 'nok'
-            return (rid, res, response.status, data)
-    except Exception as e:
-        return (rid, 'exception', repr(e))
+                    if response.headers['Content-Type'] == 'application/yang-data+json':
+                        data = await response.json()
+                    else:
+                        data = await response.text()
+                res = 'ok' if response.status in expected_status else 'nok'
+                return (rid, res, response.status, data)
+        except Exception as e:
+            return (rid, 'exception', repr(e))
+    else:
+        return (rid, 'ok', 418, 'dry-run')
 
 
 async def single_request(host, op, url, data=None):
