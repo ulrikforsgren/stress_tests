@@ -234,7 +234,7 @@ def wait_for_cpu_to_idle(p, threshold=5, progress_cb=None):
     while True:
         mem, cpu_perc, cpu_times = get_info(p)
         if progress_cb:
-            progress_cb(f'CPU: {cpu_perc:.2f}%')
+            progress_cb(f' CPU: {cpu_perc:.2f}%')
         if cpu_perc < threshold:
             break
         time.sleep(1)
@@ -264,7 +264,7 @@ def run_test(args, intent, n, n_p, parameters, task=None, progress_cb=None):
             exc += 1
         if lt is None or time.monotonic()-lt>1:
             lt = time.monotonic()
-            progress_cb(f'{c}/{n}  ok: [green]{ok}[/green] nok: [red]{nok}[/red] exc: [yellow]{exc}[/yellow]')
+            progress_cb(f' {c}/{n}  ok: [green]{ok}[/green] nok: [red]{nok}[/red] exc: [yellow]{exc}[/yellow]')
 
     elapsed, ok, total, nok, exc, results = do_test(
         args, n, n_p, intent, parameters, request_cb=request_cb)
@@ -292,7 +292,7 @@ def create_devices(name, start, n_devices, progress_cb=None):
                 if n_c>=batch_size or n>n_devices: break
             t.apply()
             if progress_cb:
-                progress_cb(f'{n}/{n_devices}')
+                progress_cb(f' {n}/{n_devices}')
             if n>=n_devices:
                 do_create_devices = False
                 break
@@ -305,9 +305,9 @@ def find_devices_capabilities(name, start, n_devices, progress_cb=None):
         for i in range(0, n_devices):
             find_capabilities(r.devices, f'{name}{start+i}')
             if progress_cb and i%100==0:
-                progress_cb(f'{i}/{n_devices}')
+                progress_cb(f' {i}/{n_devices}')
         if progress_cb:
-            progress_cb(f'{i}/{n_devices}')
+            progress_cb(f' {i}/{n_devices}')
 
     return (None, f'{n_devices} devices')
 
