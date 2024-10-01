@@ -20,10 +20,16 @@ def parseArgs(cmd_args):
     parser = argparse.ArgumentParser(cmd_args)
     parser.add_argument('-n', '--name', required=True, default='ce',
                         help="Device name")
+    parser.add_argument('-g', '--group', default='g',
+                        help="Group name")
     parser.add_argument('-c', '--count', type=int, default=1,
                         help="Number of devices to create")
+    parser.add_argument('-i', type=int, default=0,
+                        help="Starting device number")
     parser.add_argument('-p', '--port', type=int, default=10000,
                         help="Starting port number")
+    parser.add_argument('-m', type=int, default=0,
+                        help="Wrap port number using: 'c + i mod m.'")
     parser.add_argument('-a', '--address', type=str, default='localhost',
                         help="Device address")
     parser.add_argument('-t', '--type',
@@ -33,7 +39,31 @@ def parseArgs(cmd_args):
     parser.add_argument('--accept-out-of-sync',
                         action='store_true', default=False,
                         help="Device address")
+    parser.add_argument('cmd',
+                        choices=['create', 'delete', 'find', 'fetch', 'sync-from',
+                                 'create-group'],
+                        help="Command")
     return parser.parse_args()
+
+
+parameters = {
+    'create': {
+            'needs_transaction': True,
+            'p_devices': 100
+        },
+    'delete': {
+            'needs_transaction': True,
+            'p_devices': 100
+        },
+    'find': {
+            'needs_transaction': False,
+            'p_devices': 1
+        },
+    'fetch': {
+            'needs_transaction': False,
+            'p_devices': 1
+        }
+}
 
 
 def create_device(devices, name, address, port, t, nedid, authgrp,
@@ -53,30 +83,65 @@ def create_device(devices, name, address, port, t, nedid, authgrp,
     else:
         dev.out_of_sync_commit_behaviour = 'reject'
 
-def main(args):
-    n = 0
-    n_devices = args.count
-    p_devices = 100
 
-    do_create_devices = True
-    while do_create_devices:
-        with ncs.maapi.single_write_trans('admin', 'system') as t:
-            x = n
-            start = time.monotonic()
-            for _ in range(0, p_devices):
+def find_capabilities(devices, name):
+    device = devices.device
+    dev = device[name]
+    result = dev.find_capabilities()
+    return result
+
+
+def fetch_host_keys(devices, name):
+    device = devices.device
+    dev = device[name]
+    result = dev.ssh.fetch_host_keys()
+    return result
+
+
+def main(args):
+    n = args.i
+    n_devices = args.count
+    p_devices = parameters[args.cmd]['p_devices']
+
+    do_stuff = True
+    m = ncs.maapi.Maapi()
+    s = ncs.maapi.Session(m, "admin", "system")
+    while do_stuff:
+        if parameters[args.cmd]['needs_transaction']:
+            t = ncs.maapi.Transaction(m, db=ncs.RUNNING,rw=ncs.READ_WRITE)
+        x = n
+        start = time.monotonic()
+        for _ in range(0, p_devices):
+            if parameters[args.cmd]['needs_transaction']:
                 r = ncs.maagic.get_root(t)
-                dt, nedid = NEDIDs[args.type]
+            else:
+                r = ncs.maagic.get_root(m)
+            dt, nedid = NEDIDs[args.type]
+            if args.cmd == 'create':
                 create_device(r.devices, f'{args.name}{n}', args.address,
-                              args.port+n, dt, nedid, 'default',
+                              args.port+n%1000, dt, nedid, 'default',
                               args.accept_out_of_sync)
-                n += 1
-                if n>=n_devices: break
+            elif args.cmd == 'delete':
+                del r.devices.device[f'{args.name}{n}']
+            elif args.cmd == 'find':
+                result = find_capabilities(r.devices, f'{args.name}{n}')
+                print(result)
+            elif args.cmd == 'fetch':
+                result = fetch_host_keys(r.devices, f'{args.name}{n}')
+                print(result)
+            elif args.cmd == 'create-group':
+                result = fetch_host_keys(r.devices, f'{args.name}{n}')
+                print(result)
+            n += 1
+            if n>=n_devices: break
+        if parameters[args.cmd]['needs_transaction']:
             t.apply()
-            elap = time.monotonic()-start
-            print(f"Devices {args.name}{x}-{args.name}{n-1} created in ", elap, "seconds.")
-            if n>=n_devices:
-                do_create_devices = False
-                break
+            t = ncs.maapi.Transaction(m, db=ncs.RUNNING,rw=ncs.READ_WRITE)
+        elap = time.monotonic()-start
+        print(f"Devices {args.name}{x}-{args.name}{n-1} created in ", elap, "seconds.")
+        if n>=n_devices:
+            do_stuff = False
+            break
 
 if __name__ == '__main__':
     main(parseArgs(sys.argv[1:]))
