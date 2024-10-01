@@ -3,13 +3,19 @@
 
 import argparse
 import copy
-import csv
-from datetime import datetime
+import datetime
 import sys
 import time
 
 import ncs
 import psutil
+
+from rich.console import Console
+from rich.progress import Progress, TextColumn, MofNCompleteColumn, TimeElapsedColumn
+from rich.panel import Panel
+from rich.columns import Columns
+from rich.text import Text
+
 
 from stress_testing.stress_testing import \
     Parameters, Sequence, SequenceRequest, \
@@ -17,10 +23,20 @@ from stress_testing.stress_testing import \
     do_test
 from create_devices import create_device, find_capabilities
 
+
+# TODO:
+# - Write results to csv file
+#   - Add columns with the operation name and execution time as values
+# - Progress trace
+#   - 1. Forward progress and task id to test function and update progress there.
+#   - 2. Provide a callback to the test function to update progress.
+#   - 3. Provide a queue and task id to the test function.
+
+
 # Scale parameters
 numvlan = 20
-devices_batch_size = 100000
-create_batch_size = 10000
+devices_batch_size = 500
+create_batch_size = 1000
 update_batch_size = 100
 cpu_check_delay = 5
 
@@ -144,7 +160,7 @@ def get_ncs_process():
         sys.exit(1)
     elif len(pids) > 1:
         print("There are multiple ncs.smp processes running:")
-        print_pids(pids)
+        print(pids)
         print("Use -p/--pid to monitor one.")
         sys.exit(1)
     return psutil.Process(pid=pids[0])
@@ -155,7 +171,7 @@ def get_ncs_process():
 #
 
 def nso_metrics():
-    N64 = True
+    N64 = False
     with ncs.maapi.single_read_trans('admin', 'system') as t:
         r = ncs.maagic.get_root(t)
         no_devices = len(r.devices.device)
@@ -174,45 +190,76 @@ def nso_metrics():
             total_device_offloads, total_offload_memory)
 
 
-def get_log(p):
-    def log(name, info):
-        print(datetime.now().isoformat(), name, info, nso_metrics(), get_info(p), flush=True)
+def get_log(process, progress):
+    def log(name, func=None, args=None):
+        if func:
+            task_id = progress.add_task(name, progress='')
+        def progress_cb(msg):
+            progress.update(task_id, progress=msg)
+        ts = datetime.datetime.now().isoformat()
+        result = None
+        msg = None
+        if func:
+            start = time.monotonic()
+            #progress.console.print(func)
+            result, msg = func(*args, progress_cb=progress_cb)
+            elapsed = time.monotonic()-start
+            progress.remove_task(task_id)   
+            msg = '' if msg is None else msg
+            progress.console.print(Columns([
+                    Text(f'{ts} ') +
+                    Text(f'{name:30}', style='blue') +
+                    Text(f'{msg}'),
+                    Text(f'{elapsed:.2f}s', style="green", justify="right"),
+            ], equal=False, expand=True))
+        else:
+
+#        progress.console.print(ts, name, result, nso_metrics(), get_info(process))
+        #progress.console.print(ts, name, msg, et)
+            progress.console.print(Columns([
+                    Text(f'{ts} {name}'),
+            ], equal=False, expand=True))
+
     return log
 
 
-def wait_for_cpu_to_idle(p, delay, threshold=5):
+def wait_for_cpu_to_idle(p, threshold=5, progress_cb=None):
+    # TODO: Should this use its own process object to not interfere with the man process object metrics
+#    mem, cpu_perc, cpu_times = get_info(p)
+ #   if progress_cb:
+#        progress_cb(f'CPU: -%')
+ #   time.sleep(1)
+
     start = time.monotonic()
-    time.sleep(delay)
     while True:
         mem, cpu_perc, cpu_times = get_info(p)
+        if progress_cb:
+            progress_cb(f'CPU: {cpu_perc:.2f}%')
         if cpu_perc < threshold:
             break
         time.sleep(1)
-    print('CPU idle after', time.monotonic()-start, 'seconds')
+    return (None, None)
 
 
 #
 # Test functions
 #
 
-def run_test(args, intent, n, n_p, parameters, task=None):
+def run_test(args, intent, n, n_p, parameters, task=None, progress_cb=None):
     # TODO: Move host to context?
     intent['host'] = args.host
     #parameters.load_state()
     
     elapsed, ok, total, nok, exc, results = do_test(
         args, n, n_p, intent, parameters)
-    if nok>0:
-        print(results)
     #parameters.save_state()
 
-    return (elapsed, ok, nok, exc)
+    return ((elapsed, ok, nok, exc), f'{n} requests, {n_p} concurrent')
 
 
-def create_devices(name, start, n_devices):
+def create_devices(name, start, n_devices, progress_cb=None):
     n = 0
     batch_size = 100
-    start_time =  time.monotonic()
 
     do_create_devices = True
     while do_create_devices:
@@ -228,13 +275,27 @@ def create_devices(name, start, n_devices):
                 n_c += 1
                 if n_c>=batch_size or n>n_devices: break
             t.apply()
-            for i in range(0, n_c):
-                find_capabilities(r.devices, f'{name}{start+n_s+i}')
+            if progress_cb:
+                progress_cb(f'{n}/{n_devices}')
+            #for i in range(0, n_c):
+            #    find_capabilities(r.devices, f'{name}{start+n_s+i}')
             if n>=n_devices:
                 do_create_devices = False
                 break
 
-    return time.monotonic()-start_time
+    return (None, f'{n} devices in batches of {batch_size}')
+
+def find_devices_capabilities(name, start, n_devices, progress_cb=None):
+    with ncs.maapi.single_read_trans('admin', 'system') as t:
+        r = ncs.maagic.get_root(t)
+        for i in range(0, n_devices):
+            find_capabilities(r.devices, f'{name}{start+i}')
+            if progress_cb and i%100==0:
+                progress_cb(f'{i}/{n_devices}')
+        if progress_cb:
+            progress_cb(f'{i}/{n_devices}')
+
+    return (None, f'{n_devices} devices')
 
 
 
@@ -245,37 +306,44 @@ def run(args):
     args.no_networking = True
     args.commit_queue = True
 
-    #columns = ['timestamp', 'create-devices', 'create', 'load', 'wait_cpu_idle_time', 'update', 'number_of_devices', 'number_of_services']
-    #result_file = open(f'result-{datetime.now().strftime("%Y%m%d-%H%M%S")}.csv', 'w')
-    #result_writer = csv.DictWriter(result_file, columns, extrasaction='ignore')
-    #result_writer.writeheader()
-
     ncs_process = get_ncs_process()
-    log = get_log(ncs_process)
 
-    log('start', None)
+    console = Console()
+    with Progress(
+        TextColumn("{task.description}"),
+        TextColumn("{task.fields[progress]}"),
+        TimeElapsedColumn(),
+        console=console,
+        transient=False,
+        auto_refresh=True,        
+    ) as progress:
+        log = get_log(ncs_process, progress)
 
-    # create initial devices 
-    log('create-devices', create_devices('r', 0, devices_batch_size))
+        log('start')
 
-    # Create a base set of services
-    for _ in range(10):
-        log('create', run_test(args, CREATE, create_batch_size, 15, create_parameters))
-        log('load', run_test(args, LOAD, create_batch_size, 15, load_parameters))
-        wait_for_cpu_to_idle(ncs_process, cpu_check_delay)
-    # Update the services
-    n = 0
-    dn = 0
-    while True:
-        if n%10 == 0:
-            dn+=1
-            log('create-devices', create_devices('r', dn*devices_batch_size, devices_batch_size))
-            #break
-        log('create', run_test(args, CREATE, create_batch_size, 15, create_parameters))
-        log('load', run_test(args, LOAD, create_batch_size, 15, load_parameters))
-        wait_for_cpu_to_idle(ncs_process, cpu_check_delay)
-        log('update', run_test(args, UPDATE, update_batch_size, 15, update_parameters))
-        n += 1
+        # create initial devices 
+        log('create-devices', create_devices, ('r', 0, devices_batch_size))
+        log('find-devices-capabilities', find_devices_capabilities, ('r', 0, devices_batch_size))
+        log('wait-for-cpu-idle', wait_for_cpu_to_idle, (ncs_process, 5))
+        
+        # Create a base set of services
+        for _ in range(10):
+            log('create', run_test, (args, CREATE, create_batch_size, 15, create_parameters))
+            log('load', run_test, (args, LOAD, create_batch_size, 15, load_parameters))
+            log('wait-for-cpu-idle', wait_for_cpu_to_idle, (ncs_process, 5))
+        # Update the services
+        n = 0
+        dn = 0
+        while True:
+            if n%10 == 0:
+                dn+=1
+                log('create-devices', create_devices, ('r', dn*devices_batch_size, devices_batch_size))
+                #break
+            log('create', run_test, (args, CREATE, create_batch_size, 15, create_parameters))
+            log('load', run_test, (args, LOAD, create_batch_size, 15, load_parameters))
+            log('wait-for-cpu-idle', wait_for_cpu_to_idle, (ncs_process, 5))
+            log('update', run_test, (args, UPDATE, update_batch_size, 15, update_parameters))
+            n += 1
 
 
 def clean(args):
