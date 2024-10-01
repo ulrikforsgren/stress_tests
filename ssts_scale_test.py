@@ -207,9 +207,9 @@ def get_log(process, progress):
             progress.remove_task(task_id)   
             msg = '' if msg is None else msg
             progress.console.print(Columns([
-                    Text(f'{ts} ') +
+                    Text(f'{ts} ', style='gray35') +
                     Text(f'{name:30}', style='blue') +
-                    Text(f'{msg}'),
+                    Text(f'{msg}', style = 'white'),
                     Text(f'{elapsed:.2f}s', style="green", justify="right"),
             ], equal=False, expand=True))
         else:
@@ -217,7 +217,8 @@ def get_log(process, progress):
 #        progress.console.print(ts, name, result, nso_metrics(), get_info(process))
         #progress.console.print(ts, name, msg, et)
             progress.console.print(Columns([
-                    Text(f'{ts} {name}'),
+                    Text(f'{ts} ', style='gray35') +
+                    Text(f'{name:30}', style='blue')
             ], equal=False, expand=True))
 
     return log
@@ -311,8 +312,8 @@ def run(args):
     console = Console()
     with Progress(
         TextColumn("{task.description}"),
-        TextColumn("{task.fields[progress]}"),
         TimeElapsedColumn(),
+        TextColumn("{task.fields[progress]}"),
         console=console,
         transient=False,
         auto_refresh=True,        
