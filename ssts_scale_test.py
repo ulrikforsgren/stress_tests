@@ -28,15 +28,14 @@ from create_devices import create_device, find_capabilities
 # - Write results to csv file
 #   - Add columns with the operation name and execution time as values
 # - Progress trace
-#   - 1. Forward progress and task id to test function and update progress there.
-#   - 2. Provide a callback to the test function to update progress.
-#   - 3. Provide a queue and task id to the test function.
+#   - Call back from asyncio tasks.
+#   - Include success/failure in the progress
 
 
 # Scale parameters
 numvlan = 20
-devices_batch_size = 500
-create_batch_size = 1000
+devices_batch_size = 50
+create_batch_size = 100
 update_batch_size = 100
 cpu_check_delay = 5
 
@@ -207,9 +206,9 @@ def get_log(process, progress):
             progress.remove_task(task_id)   
             msg = '' if msg is None else msg
             progress.console.print(Columns([
-                    Text(f'{ts} ', style='gray35') +
-                    Text(f'{name:30}', style='blue') +
-                    Text(f'{msg}', style = 'white'),
+                    f'[gray35]{ts}[/gray35] ' +
+                    f'[blue]{name:30}[/blue]' +
+                    msg,
                     Text(f'{elapsed:.2f}s', style="green", justify="right"),
             ], equal=False, expand=True))
         else:
@@ -250,12 +249,28 @@ def run_test(args, intent, n, n_p, parameters, task=None, progress_cb=None):
     # TODO: Move host to context?
     intent['host'] = args.host
     #parameters.load_state()
-    
+    lt = None
+    c = 0
+    ok = nok = exc = 0
+    def request_cb(result):
+        nonlocal c, lt, ok, nok, exc
+        c += 1
+        r = result[1]
+        if r == 'ok':
+            ok += 1
+        elif r == 'nok':
+            nok += 1
+        else:
+            exc += 1
+        if lt is None or time.monotonic()-lt>1:
+            lt = time.monotonic()
+            progress_cb(f'{c}/{n}  ok: [green]{ok}[/green] nok: [red]{nok}[/red] exc: [yellow]{exc}[/yellow]')
+
     elapsed, ok, total, nok, exc, results = do_test(
-        args, n, n_p, intent, parameters)
+        args, n, n_p, intent, parameters, request_cb=request_cb)
     #parameters.save_state()
 
-    return ((elapsed, ok, nok, exc), f'{n} requests, {n_p} concurrent')
+    return ((elapsed, ok, nok, exc), f'{n} requests, {n_p} concurrent  ok: [green]{ok}[/green] nok: [red]{nok}[/red] exc: [yellow]{exc}[/yellow]')
 
 
 def create_devices(name, start, n_devices, progress_cb=None):
@@ -278,13 +293,11 @@ def create_devices(name, start, n_devices, progress_cb=None):
             t.apply()
             if progress_cb:
                 progress_cb(f'{n}/{n_devices}')
-            #for i in range(0, n_c):
-            #    find_capabilities(r.devices, f'{name}{start+n_s+i}')
             if n>=n_devices:
                 do_create_devices = False
                 break
 
-    return (None, f'{n} devices in batches of {batch_size}')
+    return (None, f'{n_devices} devices in batches of {batch_size}')
 
 def find_devices_capabilities(name, start, n_devices, progress_cb=None):
     with ncs.maapi.single_read_trans('admin', 'system') as t:

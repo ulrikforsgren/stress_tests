@@ -442,7 +442,7 @@ async def stress_requests_batch(args, n, n_p, setup, teardown, task, req, parame
 #
 
 
-async def stress_requests_window(args, n, n_p, setup, teardown, task, req, parameters):
+async def stress_requests_window(args, n, n_p, setup, teardown, task, req, parameters, request_cb=None):
     results = []
     tasks = set()
     await setup(req)
@@ -460,6 +460,9 @@ async def stress_requests_window(args, n, n_p, setup, teardown, task, req, param
         for d in done:
             result = await d
             results.append(result)
+            if request_cb:
+                request_cb(result)
+
         a = n_p-len(pending)  # Calculate number of free task slots
         tasks_to_start = min(a, n)
         for _ in range(0, tasks_to_start):  # Start tasks in available slots
@@ -576,12 +579,11 @@ def set_flags(args, req):
     req['params'] = flags
 
 
-def do_test(args, n, n_p, req, parameters, task=None):
+def do_test(args, n, n_p, req, parameters, task=None, request_cb=None):
     task = task or default_task
     set_flags(args, req)
     elapsed, results = asyncio.run(
-        stress_requests_window(args, n, n_p, setup, teardown, task, req, parameters))
-
+        stress_requests_window(args, n, n_p, setup, teardown, task, req, parameters, request_cb=request_cb))
     if args.v:
         pprint(results)
 
