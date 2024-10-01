@@ -36,7 +36,7 @@ CRUD_TESTS = {
         {
             'op': 'action',
             'url':
-            '/python-service:python-service/python-service:service=S<<sid>>/re-deploy',
+            '/python-service:python-service/python-service:service=<<sid>>/re-deploy',
             'data': '''{
                     "input" : {
                         "dry-run":  {}
@@ -49,7 +49,7 @@ CRUD_TESTS = {
             'url': '/python-service:python-service',
             'data': '''{
                         "service":{
-                            "name":"S<<sid>>",
+                            "name":"<<sid>>",
                             "delay":<<delay>>,
                             "device":"r<<did>>",
                             "template":["one-leaf", "vlans"],
@@ -62,13 +62,13 @@ CRUD_TESTS = {
         {
             'op': 'read',
             'url':
-            '/python-service:python-service/python-service:service=S<<sid>>',
+            '/python-service:python-service/python-service:service=<<sid>>',
         },
     'update':
         {
             'op': 'update',
             'url':
-            '/python-service:python-service/python-service:service=S<<sid>>',
+            '/python-service:python-service/python-service:service=<<sid>>',
             'data': '''{
                         "service":{
                             "delay":<<delay>>,
@@ -83,7 +83,7 @@ CRUD_TESTS = {
         {
             'op': 'delete',
             'url':
-            '/python-service:python-service/python-service:service=S<<sid>>',
+            '/python-service:python-service/python-service:service=<<sid>>',
         }
 }
 
