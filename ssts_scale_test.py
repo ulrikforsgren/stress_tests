@@ -20,7 +20,7 @@ from rich.text import Text
 from stress_testing.stress_testing import \
     Parameters, Sequence, SequenceRequest, \
     RandomString, RandomValue, SequenceRequestRandomized, \
-    do_test
+    Calc, do_test
 from create_devices import create_device, find_capabilities
 
 
@@ -45,6 +45,7 @@ parameters = Parameters({
     "sid": RandomString(15, seed=0, keep_state=True),
     "did": Sequence(0, keep_state=True),
     "data": RandomString(15),
+    "start-vlan": Calc('did')
     "numvlan": numvlan
 })
 
