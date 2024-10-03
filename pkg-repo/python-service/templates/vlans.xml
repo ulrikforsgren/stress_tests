@@ -3,11 +3,11 @@
       <device>
         <name>{/device}</name>
         <config>
-          <?for i=1; {$i <= /num-vlan}; i={$i + 1} ?>
+	<?for i={/start-vlan}; {$i < /start-vlan+/num-vlan}; i={$i + 1} ?>
           <vlan xmlns="urn:ios">
             <vlan-list>
               <id>{$i}</id>
-              <name>VLAN UPDATE {$i} {/str-value}</name>
+	      <name>{$i}-{/str-value}</name>
             </vlan-list>
           </vlan>
           <?end?>
