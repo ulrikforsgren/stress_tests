@@ -278,6 +278,26 @@ class RandomValue(RandomParameter):
         return f'RandomValue({self.lower}..{self.upper})'
 
 
+class RandomValueRequest(RandomParameter):
+    def __init__(self, lower, upper, seed=None, keep_state=False):
+        super().__init__(seed, keep_state)
+        self.lower = lower
+        self.upper = upper
+        self.n = random.randint(self.lower, self.upper)
+
+    def __deepcopy__(self, memo):
+        return self.__class__(self.lower, self.upper, self.seed)
+    
+    def __str__(self):
+        return str(self.n)
+
+    def update_request(self):
+        self.n = random.randint(self.lower, self.upper)
+
+    def current(self):
+        return f'RandomValueRequest({self.lower}..{self.upper})'
+
+
 class RandomString(RandomParameter):
     def __init__(self, length, seed=None, keep_state=False):
         super().__init__(seed, keep_state)
@@ -313,6 +333,18 @@ class RandomString(RandomParameter):
         return f'RandomString(length={self.length})'
 
 
+class Calc:
+    def __init__(self, key, wrap, mul, add):
+        self.key = key
+        self.wrap = wrap
+        self.mul = mul
+        self.add = add
+    def val(self, params):
+        i = params[self.key].n
+        o = i//self.wrap*self.mul+self.add
+        return str(o)
+    
+    
 """
 class Parameters makes it possible provide parameters in the form of <<x>> in
 url and data strings.
@@ -442,7 +474,7 @@ async def stress_requests_batch(args, n, n_p, setup, teardown, task, req, parame
 #
 
 
-async def stress_requests_window(args, n, n_p, setup, teardown, task, req, parameters):
+async def stress_requests_window(args, n, n_p, setup, teardown, task, req, parameters, request_cb=None):
     results = []
     tasks = set()
     await setup(req)
@@ -460,6 +492,9 @@ async def stress_requests_window(args, n, n_p, setup, teardown, task, req, param
         for d in done:
             result = await d
             results.append(result)
+            if request_cb:
+                request_cb(result)
+
         a = n_p-len(pending)  # Calculate number of free task slots
         tasks_to_start = min(a, n)
         for _ in range(0, tasks_to_start):  # Start tasks in available slots
@@ -502,6 +537,8 @@ async def default_task(args, parameters, client=None, host='', op='',
         p = parameters[key]
         if isinstance(p, Parameter):
             return p.update_str()
+        if isinstance(p, Calc):
+            return p.val(parameters)
         return str(p)
     url = re_sub.sub(lambda m: update_str(m.group(1)), url)
     data = re_sub.sub(lambda m: update_str(m.group(1)), data)
@@ -576,12 +613,11 @@ def set_flags(args, req):
     req['params'] = flags
 
 
-def do_test(args, n, n_p, req, parameters, task=None):
+def do_test(args, n, n_p, req, parameters, task=None, request_cb=None):
     task = task or default_task
     set_flags(args, req)
     elapsed, results = asyncio.run(
-        stress_requests_window(args, n, n_p, setup, teardown, task, req, parameters))
-
+        stress_requests_window(args, n, n_p, setup, teardown, task, req, parameters, request_cb=request_cb))
     if args.v:
         pprint(results)
 
