@@ -557,6 +557,8 @@ async def default_task(args, parameters, client=None, host='', op='',
                        resource='', data='', resource_type='data', query_parameters=None):
 
     resource = format_parameters(parameters, resource)
+    if isinstance(data, dict):
+        data = json.dumps(data)
     data = format_parameters(parameters, data)
     parameters.update_request()
     st = time.monotonic()

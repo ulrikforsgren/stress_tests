@@ -42,12 +42,12 @@ CRUD_TESTS = {
         {
             'op': 'create',
             'resource': '/model-a:model-a',
-            'data': '''{
+            'data': {
                         "list":{
                             "name":"<<prefix>><<sid>>",
                             "str-value":"String data <<sid>>"
                         }
-                    }''',
+                    },
         },
     'read':
         {
@@ -58,11 +58,11 @@ CRUD_TESTS = {
         {
             'op': 'update',
             'resource': '/model-a:model-a/list=<<prefix>><<sid>>',
-            'data': '''{
+            'data': {
                         "list":{
                             "str-value":"Changed string data <<data>>"
                         }
-                    }''',
+                    },
         },
     'delete':
         {

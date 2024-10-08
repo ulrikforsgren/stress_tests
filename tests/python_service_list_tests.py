@@ -45,26 +45,26 @@ CRUD_TESTS = {
             'op': 'action',
             'resource':
             '/python-service:python-service/service=<<prefix>><<sid>>/re-deploy',
-            'data': '''{
+            'data': {
                     "input" : {
                         "dry-run":  {}
                     }
-                }''',
+                },
         },
     'create':
         {
             'op': 'create',
             'resource': '/python-service:python-service',
-            'data': '''{
+            'data': {
                         "service":{
                             "name":"<<prefix>><<sid>>",
-                            "delay":<<delay>>,
+                            "delay":"<<delay>>",
                             "device":"r<<id>>",
                             "template":"vlans",
                             "str-value":"String data <<id>>",
-                            "num-vlan":<<numvlan>>
+                            "num-vlan":"<<numvlan>>"
                         }
-                    }''',
+                    },
         },
     'read':
         {
@@ -75,15 +75,15 @@ CRUD_TESTS = {
         {
             'op': 'update',
             'resource': '/python-service:python-service/service=<<prefix>><<sid>>',
-            'data': '''{
+            'data': {
                         "service":{
-                            "delay":<<delay>>,
+                            "delay":"<<delay>>",
                             "device":"r<<id>>",
                             "template":"vlans",
                             "str-value":"Changed <<id>>",
-                            "num-vlan":<<numvlan>>
+                            "num-vlan":"<<numvlan>>"
                         }
-                    }''',
+                    },
         },
     'delete':
         {

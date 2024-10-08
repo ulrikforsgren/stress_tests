@@ -43,13 +43,13 @@ CRUD_TESTS = {
         {
             'op': 'create',
             'resource': '/python-service:python-service',
-            'data': '''{
+            'data': {
                         "service":{
                             "name":"<<prefix>><<sid>>",
-                            "delay":<<delay>>,
+                            "delay":"<<delay>>",
                             "str-value":"String data <<sid>>"
                         }
-                    }''',
+                    },
         },
     'read':
         {
@@ -60,12 +60,12 @@ CRUD_TESTS = {
         {
             'op': 'update',
             'resource': '/python-service:python-service/service=<<prefix>><<sid>>',
-            'data': '''{
+            'data': {
                         "service":{
-                            "delay":<<delay>>,
+                            "delay":"<<delay>>",
                             "str-value":"Changed string data <<data>>"
                         }
-                    }''',
+                    },
         },
     'delete':
         {

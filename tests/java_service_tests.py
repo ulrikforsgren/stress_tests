@@ -44,13 +44,13 @@ CRUD_TESTS = {
         {
             'op': 'create',
             'resource': '/java-service:java-service',
-            'data': '''{
+            'data': {
                         "service":{
                             "name":"<<prefix>><<sid>>",
-                            "delay":<<delay>>,
+                            "delay":"<<delay>>",
                             "str-value":"String data <<sid>>"
                         }
-                    }''',
+                    },
         },
     'read':
         {
@@ -61,12 +61,12 @@ CRUD_TESTS = {
         {
             'op': 'update',
             'resource': '/java-service:java-service/service=<<prefix>><<sid>>',
-            'data': '''{
+            'data': {
                         "service":{
-                            "delay":<<delay>>,
+                            "delay":"<<delay>>",
                             "str-value":"Changed string data <<data>>"
                         }
-                    }''',
+                    },
         },
     'delete':
         {

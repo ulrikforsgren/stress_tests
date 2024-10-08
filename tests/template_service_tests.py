@@ -42,12 +42,12 @@ CRUD_TESTS = {
         {
             'op': 'create',
             'resource': '/template-service:template-service',
-            'data': '''{
+            'data': {
                         "service":{
                             "name":"<<prefix>><<sid>>",
                             "str-value":"String data <<sid>>"
                         }
-                    }''',
+                    },
         },
     'read':
         {
@@ -58,11 +58,11 @@ CRUD_TESTS = {
         {
             'op': 'update',
             'resource': '/template-service:template-service/service=<<prefix>><<sid>>',
-            'data': '''{
+            'data': {
                         "service":{
                             "str-value":"Changed string data <<data>>"
                         }
-                    }''',
+                    },
         },
     'delete':
         {
