@@ -3,18 +3,28 @@
 
 import sys
 
-from stress_testing.stress_testing import parseArgs, Parameters,\
-     SequenceRequest, RandomValue, run_test
+from stress_testing.stress_testing import (
+    parseArgs,
+    Parameters,
+    SequenceRequest,
+    RandomValue,
+    run_test
+)
 
 
-# Inject paramaters that can be update on multiple levels when iterating:
-#  - each usage (Sequence)
-#  - url and data (SequenceLine)
+# Paramaters are used to dynamically update the intent (op, resource, data, ...) 
+# for each request. There are multiple types of parameters to create e.g 
+# sequences, random values, etc. that are updated at various levels:
+#
+#  - each usage/string-replacement (Sequence, RandomValue, ...)
+#  - per request (SequenceRequest, SequenceRequestRandom, ...)
 #  - each batch of requests (SequenceBatch)
 #
+
 parameters = Parameters({
-    "id": SequenceRequest(0),
-    "data": RandomValue(0, 4000000000),
+    'prefix': 'S',
+    'sid': SequenceRequest(0),
+    'data': RandomValue(0, 4000000000)
 })
 
 
@@ -26,44 +36,40 @@ CRUD_TESTS = {
     'clean':
         {
             'op': 'delete',
-            'url': '/model-a:model-a'
+            'resource': '/model-a:model-a'
         },
     'create':
         {
             'op': 'create',
-            'url': '/model-a:model-a',
+            'resource': '/model-a:model-a',
             'data': '''{
                         "list":{
-                            "name":"K<<id>>",
-                            "str-value":"String data <<id>>"
+                            "name":"<<prefix>><<sid>>",
+                            "str-value":"String data <<sid>>"
                         }
                     }''',
-            'parameters': parameters
         },
     'read':
         {
             'op': 'read',
-            'url': '/model-a:model-a/model-a:list=K<<id>>',
-            'parameters': parameters
+            'resource': '/model-a:model-a/list=<<prefix>><<sid>>',
         },
     'update':
         {
             'op': 'update',
-            'url': '/model-a:model-a/model-a:list=K<<id>>',
+            'resource': '/model-a:model-a/list=<<prefix>><<sid>>',
             'data': '''{
                         "list":{
                             "str-value":"Changed string data <<data>>"
                         }
                     }''',
-            'parameters': parameters
         },
     'delete':
         {
             'op': 'delete',
-            'url': '/model-a:model-a/model-a:list=K<<id>>',
-            'parameters': parameters
+            'resource': '/model-a:model-a/list=<<prefix>><<sid>>',
         }
 }
 
 if __name__ == '__main__':
-    run_test(parseArgs(sys.argv[1:]), CRUD_TESTS, 500, 40)
+    run_test(parseArgs(), CRUD_TESTS, parameters, 500, 40)

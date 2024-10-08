@@ -3,16 +3,24 @@
 
 import sys
 
-from stress_testing.stress_testing import parseArgs, Parameters,\
-     Sequence, SequenceRequest, RandomString, RandomValue, \
-     SequenceRequestRandomized, run_test
+from stress_testing.stress_testing import (
+    parseArgs,
+    Parameters,
+    Sequence,
+    RandomString,
+    run_test
+)
 
 
-# Inject paramaters that can be update on multiple levels when iterating:
-#  - each usage (Sequence)
-#  - url and data (SequenceLine)
+# Paramaters are used to dynamically update the intent (op, resource, data, ...) 
+# for each request. There are multiple types of parameters to create e.g 
+# sequences, random values, etc. that are updated at various levels:
+#
+#  - each usage/string-replacement (Sequence, RandomValue, ...)
+#  - per request (SequenceRequest, SequenceRequestRandom, ...)
 #  - each batch of requests (SequenceBatch)
 #
+
 parameters = Parameters({
     "sid": RandomString(15, seed=0, keep_state=True),
     "did": Sequence(0, 10000, keep_state=True),
@@ -30,12 +38,12 @@ CRUD_TESTS = {
     'clean':
         {
             'op': 'delete',
-            'url': '/python-service:python-service'
+            'resource': '/python-service:python-service'
         },
     're-deploy':
         {
             'op': 'action',
-            'url':
+            'resource':
             '/python-service:python-service/python-service:service=<<sid>>/re-deploy',
             'data': '''{
                     "input" : {
@@ -46,7 +54,7 @@ CRUD_TESTS = {
     'create':
         {
             'op': 'create',
-            'url': '/python-service:python-service',
+            'resource': '/python-service:python-service',
             'data': '''{
                         "service":{
                             "name":"<<sid>>",
@@ -61,13 +69,13 @@ CRUD_TESTS = {
     'read':
         {
             'op': 'read',
-            'url':
+            'resource':
             '/python-service:python-service/python-service:service=<<sid>>',
         },
     'update':
         {
             'op': 'update',
-            'url':
+            'resource':
             '/python-service:python-service/python-service:service=<<sid>>',
             'data': '''{
                         "service":{
@@ -82,10 +90,10 @@ CRUD_TESTS = {
     'delete':
         {
             'op': 'delete',
-            'url':
+            'resource':
             '/python-service:python-service/python-service:service=<<sid>>',
         }
 }
 
 if __name__ == '__main__':
-    run_test(parseArgs(sys.argv[1:], ['re-deploy', 'action','login']), CRUD_TESTS, parameters, 500, 40)
+    run_test(parseArgs(None, ['re-deploy']), CRUD_TESTS, parameters, 500, 40)

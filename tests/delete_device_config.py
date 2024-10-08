@@ -8,6 +8,10 @@ from stress_testing.stress_testing import parseArgs, Parameters,\
 
 from devices import devices
 
+
+#
+# New Parameter types can be created by extending the Sequence class
+#
 class PopRequest(Sequence):
     def __init__(self, l):
         self.l = l
@@ -20,11 +24,16 @@ class PopRequest(Sequence):
     def update_batch(self):
         pass
 
-# Inject paramaters that can be update on multiple levels when iterating:
-#  - each usage (Sequence)
-#  - url and data (SequenceLine)
+
+# Paramaters are used to dynamically update the intent (op, resource, data, ...) 
+# for each request. There are multiple types of parameters to create e.g 
+# sequences, random values, etc. that are updated at various levels:
+#
+#  - each usage/string-replacement (Sequence, RandomValue, ...)
+#  - per request (SequenceRequest, SequenceRequestRandom, ...)
 #  - each batch of requests (SequenceBatch)
 #
+
 parameters = Parameters({
     "name": PopRequest(devices),
 })
@@ -33,16 +42,14 @@ parameters = Parameters({
 CRUD_TESTS = {
     '__info':
         {
-            'name': 'Run parallel devices device delete-config from a predefined list',
-            'parameters': parameters
+            'name': 'Run parallel devices device delete-config from a predefined list'
         },
     'del-config':
         {
             'op': 'action',
-            'url': '/tailf-ncs:devices/device={name}/delete-config',
-            'parameters': parameters
+            'resource': '/tailf-ncs:devices/device={name}/delete-config',
         },
 }
 
 if __name__ == '__main__':
-    run_test(parseArgs(sys.argv[1:], extra_actions=['del-config']), CRUD_TESTS, 500, 40)
+    run_test(parseArgs(None, extra_actions=['del-config']), CRUD_TESTS, parameters, 500, 40)

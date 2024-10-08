@@ -12,3 +12,12 @@
 - Catch exception(s) and KeyBoardInterrupt
 - Better formatting of title in HTML.
 - Pause job? (must be implemented per job type e.g sliding_window)
+- Fix how __repr__, __str__ and current are used in class Parameter etc.
+- Fix how values are update between requests e.g random values.
+- Print last value for all Parameters
+- Update parameters comments for all tests
+- Write ongoing op before stress requests (progress bar?)
+- Color stress tests output.
+- Support RequestBatch even for sliding_window_executor
+- Unify executors
+- Update ContextValue to read from NSO

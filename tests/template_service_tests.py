@@ -3,18 +3,28 @@
 
 import sys
 
-from stress_testing.stress_testing import parseArgs, Parameters,\
-     SequenceRequest, RandomValue, run_test
+from stress_testing.stress_testing import (
+    parseArgs,
+    Parameters,
+    SequenceRequest,
+    RandomValue,
+    run_test
+)
 
 
-# Inject paramaters that can be update on multiple levels when iterating:
-#  - each usage (Sequence)
-#  - url and data (SequenceLine)
+# Paramaters are used to dynamically update the intent (op, resource, data, ...) 
+# for each request. There are multiple types of parameters to create e.g 
+# sequences, random values, etc. that are updated at various levels:
+#
+#  - each usage/string-replacement (Sequence, RandomValue, ...)
+#  - per request (SequenceRequest, SequenceRequestRandom, ...)
 #  - each batch of requests (SequenceBatch)
 #
+
 parameters = Parameters({
-    "id": SequenceRequest(0),
-    "data": RandomValue(0, 4000000000),
+    'prefix': 'S',
+    'sid': SequenceRequest(0),
+    'data': RandomValue(0, 4000000000)
 })
 
 
@@ -26,44 +36,40 @@ CRUD_TESTS = {
     'clean':
         {
             'op': 'delete',
-            'url': '/template-service:template-service'
+            'resource': '/template-service:template-service'
         },
     'create':
         {
             'op': 'create',
-            'url': '/template-service:template-service',
-            'data': '''{{
-                        "service":{{
-                            "name":"K{id}",
-                            "str-value":"String data {id}"
-                        }}
-                    }}''',
-            'parameters': parameters
+            'resource': '/template-service:template-service',
+            'data': '''{
+                        "service":{
+                            "name":"<<prefix>><<sid>>",
+                            "str-value":"String data <<sid>>"
+                        }
+                    }''',
         },
     'read':
         {
             'op': 'read',
-            'url': '/template-service:template-service/template-service:service=K{id}',
-            'parameters': parameters
+            'resource': '/template-service:template-service/service=<<prefix>><<sid>>',
         },
     'update':
         {
             'op': 'update',
-            'url': '/template-service:template-service/template-service:service=K{id}',
-            'data': '''{{
-                        "service":{{
-                            "str-value":"Changed string data {data}"
-                        }}
-                    }}''',
-            'parameters': parameters
+            'resource': '/template-service:template-service/service=<<prefix>><<sid>>',
+            'data': '''{
+                        "service":{
+                            "str-value":"Changed string data <<data>>"
+                        }
+                    }''',
         },
     'delete':
         {
             'op': 'delete',
-            'url': '/template-service:template-service/template-service:service=K{id}',
-            'parameters': parameters
+            'resource': '/template-service:template-service/service=<<prefix>><<sid>>',
         }
 }
 
 if __name__ == '__main__':
-    run_test(parseArgs(sys.argv[1:]), CRUD_TESTS, 500, 40)
+    run_test(parseArgs(), CRUD_TESTS, parameters, 500, 40)

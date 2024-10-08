@@ -4,8 +4,12 @@
 
 import argparse
 import asyncio
+from collections import deque
 from datetime import datetime, timedelta
+import importlib.util
 import io
+import json
+import os
 import pprint as pp
 import queue
 import random
@@ -14,25 +18,27 @@ import socket
 import sys
 import time
 from threading import Thread
+import traceback
 
-import matplotlib.pyplot as plt
-import matplotlib.animation as animation
-import numpy as np
 from prompt_toolkit.patch_stdout import patch_stdout
 from prompt_toolkit.shortcuts import PromptSession, CompleteStyle
 from prompt_toolkit.history import FileHistory
 from prompt_toolkit.completion import Completer, Completion, NestedCompleter
 
-from stress_testing.stress_testing import setup, teardown, default_task, Parameters,\
+from stress_testing.stress_testing import setup, teardown, default_task, Parameters, \
     Sequence, SequenceRequest, RandomValue, single_request
+
+import grpc
+import ui_pb2
+import ui_pb2_grpc
 
 
 def parseArgs():
     parser = argparse.ArgumentParser()
     parser.add_argument('--host', type=str, default='localhost:8080',
                         help='Host:Port to connect to.')
-    parser.add_argument('--yaxis', type=int, default=300,
-                        help='Y axis max value.')
+    parser.add_argument('--history', type=int, default=3600,
+                         help='How many seconds to keep history data.')
     return parser.parse_args()
 
 
@@ -42,38 +48,6 @@ def parseArgs():
 
 # Useful for debugging
 pprint = pp.PrettyPrinter(indent=4).pprint
-
-
-class DataQueue(queue.Queue):
-    """
-    DataQueue provides a FIFO type queue where, where the get
-    method return all currently queued items in one chunk.
-    It uses a socketpair to provide the synchronization needed
-    to get the number of currently queued items.
-    """
-
-    def __init__(self, maxsize=0):
-        super().__init__(maxsize)
-        # It might be possible to use a diggre
-        self.r, self.w = socket.socketpair()
-        self.r.setblocking(False)
-
-    def get(self, block=True, timeout=None):
-        try:
-            results = []
-            data = self.r.recv(self.maxsize)
-            for _ in data:
-                results.append(super().get())
-            return results
-        except io.BlockingIOError:
-            return []
-
-    def put(self, item):
-        super().put(item)
-        self.w.send(b'.')
-
-    def fileno(self):
-        return self.r.fileno()
 
 
 # Function to copy a dictionary except specified keys
@@ -95,23 +69,28 @@ def str_to_dict(l):
 #############################################################################
 last_result = None
 last_error = None
+last_success = None
+last_exc = None
 
 
-async def sliding_window_executor(q, task_function, data):
-    global close_flag, last_result, last_error
-    await setup(data)
+async def sliding_window_executor(q, task_function, task_args):
+    global close_flag, last_result, last_error, last_success, last_exc
+    await setup(task_args)
     try:
         tasks = set()
 
-        parameters = data['parameters']
+        parameters = task_args['parameters']
         parameters['requests-count'] = 0
+        parameters['ok'] = 0
+        parameters['nok'] = 0
+        parameters['exc'] = 0
         stop = parameters.get('stop', 0)
         req_count = 0
         more_requests = True
 
-        # Start initial n_p number of tasks
-        for _ in range(0, parameters['n_p']):
-            tasks.add(asyncio.create_task(task_function(**data)))
+        # Start initial concurrency number of tasks
+        for _ in range(0, parameters['concurrency']):
+            tasks.add(asyncio.create_task(task_function(**task_args)))
             req_count += 1
             if stop > 0 and req_count >= stop:
                 more_requests = False
@@ -124,19 +103,26 @@ async def sliding_window_executor(q, task_function, data):
                 parameters['requests-count'] += 1
                 result = await d
                 last_result = (datetime.now().isoformat(), result)
-                if result[1] != 'ok':
+                if result[1] == 'ok':
+                    parameters['ok'] += 1
+                    last_success = last_result
+                elif result[1] == 'nok':
+                    parameters['nok'] += 1
                     last_error = last_result
-                if parameters['add_to_graph']:
-                    # Push results to graph_handler
-                    q.put(result)
-            # Start new tasks to keep a total of n_p number of tasks running.
+                else:
+                    parameters['exc'] += 1
+                    last_exc = last_result
+                if parameters['add_to_metrics']:
+                    # Push results to metrics_handler
+                    await q.put((time.time(), result))
+            # Start new tasks to keep a total of concurrency number of tasks running.
             # Calculate number of free task slots
             if more_requests:
-                tasks_to_start = data['parameters']['n_p']-len(tasks)
+                tasks_to_start = task_args['parameters']['concurrency']-len(tasks)
                 if tasks_to_start > 0:
                     # Start tasks in available slots
                     for _ in range(0, tasks_to_start):
-                        tasks.add(asyncio.create_task(task_function(**data)))
+                        tasks.add(asyncio.create_task(task_function(**task_args)))
                         req_count += 1
                         if stop > 0 and req_count >= stop:
                             more_requests = False
@@ -149,7 +135,87 @@ async def sliding_window_executor(q, task_function, data):
     finally:
         for t in tasks:
             t.cancel()
-        await teardown(data)
+        await teardown(task_args)
+
+
+#############################################################################
+#  THROTTLING JOB EXECUTOR
+#############################################################################
+
+async def throttling_executor(q, task_function, task_args):
+    global close_flag, last_result, last_error, last_success, last_exc
+    await setup(task_args)
+    try:
+        tasks = set()
+
+        parameters = task_args['parameters']
+        parameters['requests-count'] = 0
+        parameters['task-wait-dept'] = 0
+        parameters['ok'] = 0
+        parameters['nok'] = 0
+        parameters['exc'] = 0
+        req_count = 0
+
+        # NOTE: Only one concurrent task is supported
+
+        # Start initial concurrency number of tasks
+        stop = parameters.get('stop', 0)
+        for _ in range(0, parameters['concurrency']):
+            tasks.add(asyncio.create_task(task_function(**task_args)))
+            req_count += 1
+            if stop > 0 and req_count >= stop:
+                more_requests = False
+                break
+
+        while not close_flag and len(tasks) > 0:
+            done, tasks = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+            stop = parameters.get('stop', 0)
+            rps = parameters.get('requests-per-second', 0)
+            add_to_metrics = parameters.get('add_to_metrics', False)
+            concurrency = parameters.get('concurrency', 1)
+            for d in done:
+                global_parameters['requests-count'] += 1
+                parameters['requests-count'] += 1
+                result = await d
+                rid, rstatus, rcode, rresult, rtime = result
+                last_result = (datetime.now().isoformat(), result)
+                if rstatus == 'ok':
+                    parameters['ok'] += 1
+                    last_success = last_result
+                elif rstatus == 'nok':
+                    parameters['nok'] += 1
+                    last_error = last_result
+                else:
+                    parameters['exc'] += 1
+                    last_exc = last_result
+                if add_to_metrics:
+                    # Push results to metrics_handler
+                    await q.put((time.time(), result))
+
+                d = 1/(rps/concurrency)-rtime if rps>0 else 0
+                if d < 0:
+                    # This means that concurrency may need to be increased
+                    parameters['task-wait-dept'] -= d
+                # Start tasks in available slots
+                if stop == 0 or req_count < stop:
+                    async def new_task():
+                        if d > 0:
+                            await asyncio.sleep(d)
+                        return await task_function(**task_args)
+                    tasks.add(asyncio.create_task(new_task()))
+                    req_count += 1
+
+    except asyncio.CancelledError:
+        # TODO: More graceful shutdown and collect results?
+        pass
+    except Exception as e:
+        print("EXCEPTION", e)
+        # Print traceback
+        print(traceback.format_exc())
+    finally:
+        for t in tasks:
+            t.cancel()
+        await teardown(task_args)
 
 
 #############################################################################
@@ -161,277 +227,51 @@ async def sliding_window_executor(q, task_function, data):
 #       they are passed by reference.
 global_parameters = {
     'host': 'localhost:8080',
-    'n_p': 1,
+    'concurrency': 1,
     'delay': 0,
     'requests-count': 0,
-    'add_to_graph': 1,  # Add data to graph
+    'add_to_metrics': True,
     'stop': 0  # Run job until stopped
 }
 
+def get_jobs():
+    jobs_directory_path = f'{os.path.dirname(os.path.abspath(__file__))}/jobs'
+    files = os.listdir(jobs_directory_path)
+    jobs = dict()
+    for filename in files:
+        if filename.endswith('.py') and filename != '__init__.py':
+            module_name = filename.removesuffix('.py')
+            spec = importlib.util.spec_from_file_location(f'jobs.{module_name}', f'{jobs_directory_path}/{filename}')
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            if hasattr(module, 'DATA'):
+                jobs[module_name] = module.DATA
+            elif hasattr(module, 'job'):
+                jobs[module_name] = module.job
 
-async def job_model_a(args, ctx, rq, extra_params={}):
-    ctx.update({
-        "id": SequenceRequest(0, wrap=1000),
-        "data": RandomValue(0, 4000000000),
-    })
-    ctx.set(extra_params)
-    data = {
-        'host': ctx['host'],
-        'op': 'update',
-        'url': '/model-a:model-a/model-a:list=K<<id>>',
-        'data': '''{
-                    "list":{
-                        "str-value": "Changed string data <<data>>"
-                    }
-                }''',
-        'parameters': ctx
-    }
-    await sliding_window_executor(rq, default_task, data)
+    return jobs
 
-
-async def job_python_service_create(args, ctx, rq, extra_params={}):
-    ctx.update({
-        "id": SequenceRequest(0),
-        "data": RandomValue(0, 4000000000),
-        "delay": 0
-    })
-    ctx.set(extra_params)
-    data = {
-        'host': ctx['host'],
-        'op': 'create',
-        'url': '/python-service:python-service',
-        'data': '''{
-                    "service":{
-                        "name": "K<<id>>",
-                        "delay": <<delay>>,
-                        "str-value": "String data <<data>>"
-                    }
-                }''',
-        'parameters': ctx
-    }
-    await sliding_window_executor(rq, default_task, data)
-
-
-async def job_python_service_list_create_no_networking(args, ctx, rq, extra_params={}):
-    ctx.update({
-        "id": SequenceRequest(0),
-        "data": RandomValue(0, 4000000000),
-        "delay": 0,
-        "numvlan": 1,
-        "stop": 1000
-    })
-    ctx.set(extra_params)
-    data = {
-        'host': args.host,
-        'op': 'create',
-        'url': '/python-service:python-service',
-        'data': '''{
-                    "service":{
-                        "name": "K<<id>>",
-                        "delay": <<delay>>,
-                        "template": "vlans",
-                        "device": "r<<id>>",
-                        "num-vlan": <<numvlan>>,
-                        "str-value": "<<data>>"
-                    }
-                }''',
-        'parameters': ctx,
-        'params': {'no-networking': 'true'}
-    }
-    await sliding_window_executor(rq, default_task, data)
-
-
-async def job_python_service_list_update_no_networking(args, ctx, rq, extra_params={}):
-    ctx.update({
-        "id": SequenceRequest(0, wrap=1000),
-        "data": RandomValue(0, 4000000000),
-        "delay": 0,
-        "numvlan": 1
-    })
-    ctx.set(extra_params)
-    data = {
-        'host': args.host,
-        'op': 'update',
-        'url': '/python-service:python-service/service=K<<id>>',
-        'data': '''{
-                    "service":{
-                        "delay": <<delay>>,
-                        "template": "vlans",
-                        "device": "r<<id>>",
-                        "num-vlan": <<numvlan>>,
-                        "str-value": "<<data>>"
-                    }
-                }''',
-        'parameters': ctx,
-        'params': {'no-networking': 'true'}
-    }
-    await sliding_window_executor(rq, default_task, data)
-
-
-async def job_python_service_list_update_commit_queue(args, ctx, rq, extra_params={}):
-    ctx.update({
-        "id": SequenceRequest(0, wrap=1000),
-        "data": RandomValue(0, 4000000000),
-        "delay": 0,
-        "numvlan": 1
-    })
-    ctx.set(extra_params)
-    data = {
-        'host': args.host,
-        'op': 'update',
-        'url': '/python-service:python-service/service=K<<id>>',
-        'data': '''{
-                    "service":{
-                        "delay": <<delay>>,
-                        "template": "vlans",
-                        "device": "r<<id>>",
-                        "num-vlan": <<numvlan>>,
-                        "str-value": "<<data>>"
-                    }
-                }''',
-        'parameters': ctx,
-        'params': {'commit-queue': 'sync'}
-    }
-    await sliding_window_executor(rq, default_task, data)
-
-
-async def job_python_service_list_update(args, ctx, rq, extra_params={}):
-    ctx.update({
-        "id": SequenceRequest(0, wrap=1000),
-        "data": RandomValue(0, 4000000000),
-        "delay": 0,
-        "numvlan": 1
-    })
-    ctx.set(extra_params)
-    data = {
-        'host': args.host,
-        'op': 'update',
-        'url': '/python-service:python-service/service=K<<id>>',
-        'data': '''{
-                    "service":{
-                        "delay": <<delay>>,
-                        "template": "vlans",
-                        "device": "r<<id>>",
-                        "num-vlan": <<numvlan>>,
-                        "str-value": "<<data>>"
-                    }
-                }''',
-        'parameters': ctx
-    }
-    await sliding_window_executor(rq, default_task, data)
-
-
-async def job_python_service_delete(args, ctx, rq, extra_params={}):
-    ctx.update({
-        "id": SequenceRequest(0)
-    })
-    ctx.set(extra_params)
-    data = {
-        'host': args.host,
-        'op': 'delete',
-        'url': '/python-service:python-service/python-service:service=K<<id>>',
-        'parameters': ctx
-    }
-    await sliding_window_executor(rq, default_task, data)
-
-
-async def job_vrouter_service_create(args, ctx, rq, extra_params={}):
-    ctx.update({
-        "id": SequenceRequest(0),
-        "data": RandomValue(0, 4000000000),
-        "delay": 0,
-        "stop": 1000
-    })
-    ctx.set(extra_params)
-    data = {
-        'host': ctx['host'],
-        'op': 'create',
-        'url': '/vrouter:vrouter',
-        'data': '''{
-                    "service":{
-                        "name": "K<<id>>",
-                        "delay": <<delay>>,
-                        "template": "vlans",
-                        "device": "r<<id>>",
-                        "str-value": "<<data>>",
-                        "num-vlan": 1
-                    }
-                }''',
-        'parameters': ctx
-    }
-    await sliding_window_executor(rq, default_task, data)
-
-
-async def job_vrouter_service_update_no_networking(args, ctx, rq, extra_params={}):
-    ctx.update({
-        "id": SequenceRequest(0, wrap=1000),
-        "data": RandomValue(0, 4000000000),
-        "delay": 0,
-        "numvlan": 1
-    })
-    ctx.set(extra_params)
-    data = {
-        'host': args.host,
-        'op': 'update',
-        'url': '/vrouter:vrouter/service=K<<id>>',
-        'data': '''{
-                    "service":{
-                        "delay": <<delay>>,
-                        "template": "vlans",
-                        "device": "r<<id>>",
-                        "num-vlan": <<numvlan>>,
-                        "str-value": "<<data>>"
-                    }
-                }''',
-        'parameters': ctx,
-        'params': {'no-networking': 'true'}
-    }
-    await sliding_window_executor(rq, default_task, data)
-
-
-async def job_devices_sync_from(args, ctx, rq, extra_params=None):
-    ctx.update({
-        "id": SequenceRequest(0),
-        'stop': 1000
-    })
-    ctx.set(extra_params)
-    data = {
-        'host': args.host,
-        'op': 'action',
-        'url': '/tailf-ncs:devices/device=r<<id>>/sync-from',
-        'parameters': ctx
-    }
-    await sliding_window_executor(rq, default_task, data)
-
-
-async def job_dummy(args, ctx, rq, extra_params=None):
-    ctx.update({
-        "id": RandomValue(0, 4000000000),
-        "value": SequenceRequest(0),
-        "requests-count": 0
-    })
-    ctx.set(extra_params)
+async def job(args, ctx, rq, data, extra_params={}):
     try:
-        while not close_flag:
-            ctx['requests-count'] += 1
-            await asyncio.sleep(ctx['delay']/1000)
-    except asyncio.CancelledError:
-        pass
+        print(rq)
+        print(data)
+        print(extra_params)
+        # TODO: Clean up context parameters mixup
+        task_args = data.copy()
+        task_args['host'] = ctx['host'] if 'host' not in task_args else task_args['host'] # Sometimes we set host as args.host. Why?
+        ctx.update(data['parameters'])
+        ctx.set(extra_params)
+        task_args['parameters'] = ctx
+        task_args['ctx'] = ctx
+        task_args['data'] = json.dumps(data['data'])
+#        await sliding_window_executor(rq, default_task, d)
+        await throttling_executor(rq, default_task, task_args)
+    except Exception as e:
+        print(f"Error in job: {e}")
+        print(traceback.format_exc())
 
-jobs = {
-    'model_a': job_model_a,
-    'python_service_create': job_python_service_create,
-    'python_service_list_create_no_networking': job_python_service_list_create_no_networking,
-    'python_service_list_update_no_networking': job_python_service_list_update_no_networking,
-    'python_service_list_update_commit_queue': job_python_service_list_update_commit_queue,
-    'python_service_list_update': job_python_service_list_update,
-    'vrouter_service_create': job_vrouter_service_create,
-    'vrouter_service_update_no_networking': job_vrouter_service_update_no_networking,
-    'python_service_delete': job_python_service_delete,
-    'python_service_update': None,  # job_model_update_python_service,
-    'devices-sync-from': job_devices_sync_from,
-    'dummy': job_dummy
-}
+
+jobs = get_jobs()
 
 
 #############################################################################
@@ -444,14 +284,45 @@ running_jobs = {}
 completed_jobs = {}
 
 
+class Runtime:
+    def __init__(self):
+        self.starttime = time.monotonic()
+    def __str__(self):
+        return f"{self.value:.2f} seconds"
+    @property
+    def value(self):
+        return time.monotonic()-self.starttime
+
+
+class Throughput:
+    def __init__(self, ctx, counter, runtime):
+        self.ctx = ctx
+        self.counter = counter
+        self.runtime = runtime
+    def __str__(self):
+        return f"{self.value:.2f} requests/second"
+    @property
+    def value(self):
+        try:
+            return self.ctx[self.counter]/self.runtime.value
+        except:
+            return 0.0
+
 async def job_executor(name, task):
     global running_jobs, completed_jobs
     starttime = datetime.now()
     start = time.monotonic()
+    running_jobs[name]['ctx']['start'] = starttime.isoformat()
+    rt = Runtime()
+    running_jobs[name]['ctx']['runtime'] = rt
+    tp = Throughput(running_jobs[name]['ctx'], 'requests-count', rt)
+    running_jobs[name]['ctx']['throughput'] = tp
     await task
     runtime = time.monotonic()-start
+    running_jobs[name]['ctx']['runtime'] = rt.value
+    running_jobs[name]['ctx']['throughput'] = tp.value
     completed_jobs[name] = {
-        'start': starttime.isoformat(),
+        #'start': starttime.isoformat(),
         'end': (starttime+timedelta(seconds=runtime)).isoformat(),
         'runtime': runtime
     }
@@ -514,8 +385,7 @@ commands = {
             }, "Set job parameters."),
     "jobs": (None, "Show running jobs."),
     "last": (None, "Show last request result and error."),
-    "zoom": (None, "Zoom graph."),
-    "clear": (None, "Clear graph data."),
+    "clear": (None, "Clear graph data."),   # TODO: Fix for webui
     "help": (None, "Show this help."),
 }
 
@@ -528,7 +398,7 @@ completer = NestedCompleter.from_nested_dict({
 async def command_handler(args, rq, cq):
     global close_flag, global_parameters
     req_task = None
-    cmd_history = FileHistory(".stress_test_graph")
+    cmd_history = FileHistory(".benchmarching_nso_history")
     with patch_stdout():
         session = PromptSession("benchmarking-nso> ", history=cmd_history)
         try:
@@ -556,15 +426,25 @@ async def command_handler(args, rq, cq):
                             elif cmdargs[0] in running_jobs:
                                 print('Job is already running.')
                             else:
-                                co = jobs[cmdargs[0]]
+                                job_data = jobs[cmdargs[0]]
                                 ctx = Parameters(dict_copy_except(
                                     global_parameters, ['requests-count']))
                                 extra_params = str_to_dict(cmdargs[1:])
-                                running_jobs[cmdargs[0]] = {
-                                    'task': asyncio.create_task(
-                                        job_executor(cmdargs[0], co(args, ctx, rq, extra_params=extra_params))),
-                                    'ctx': ctx
-                                }
+                                if not callable(job_data):
+                                    global job
+                                    running_jobs[cmdargs[0]] = {
+                                        'task': asyncio.create_task(
+                                            job_executor(cmdargs[0], job(args, ctx, rq, job_data, extra_params=extra_params))),
+                                        'ctx': ctx
+                                    }
+                                else:
+                                    running_jobs[cmdargs[0]] = {
+                                        'task': asyncio.create_task(
+                                            job_executor(cmdargs[0], job_data(args, ctx, rq, None, extra_params=extra_params))),
+                                        'ctx': ctx
+                                    }
+                                # cq.put({'cmd': 'start'})
+                                # cq.join()
                         elif cmd == 'stop':
                             if cmdargs[0] not in jobs:
                                 print('Invalid job name.')
@@ -574,6 +454,8 @@ async def command_handler(args, rq, cq):
                                 task = running_jobs[cmdargs[0]]['task']
                                 task.cancel()
                                 # del running_jobs[cmdargs[0]]
+                                # cq.put({'cmd': 'stop'})
+                                # cq.join()
                         elif cmd == 'jobs':
                             if running_jobs:
                                 print('Running jobs:')
@@ -613,10 +495,12 @@ async def command_handler(args, rq, cq):
                                 idx = 1
                             elif cmdargs[0] == 'job':
                                 if cmdargs[1] in jobs:
+                                    ctx = running_jobs[cmdargs[1]]['ctx']
                                     idx = 2
+                                    #cq.put({'cmd': 'set'})
+                                    #cq.join()
                                 else:
                                     print('Invalid job name.')
-                                    ctx = running_jobs[cmdargs[1]]['ctx']
                             if idx:
                                 if cmdargs[idx] in ctx:
                                     v = ctx[cmdargs[idx]]
@@ -632,23 +516,20 @@ async def command_handler(args, rq, cq):
                                             int(cmdargs[idx]))
                                 else:
                                     print('Invalid parameter name.')
-
-                        elif cmd == 'zoom':
-                            c = {'cmd': 'zoom', 'y': (
-                                int(cmdargs[0]) if len(cmdargs) > 0 else 0)}
-                            cq.put(c)
-                            cq.join()
                         elif cmd == 'clear':
                             c = {'cmd': 'clear'}
-                            cq.put(c)
-                            cq.join()
+                            #cq.put(c)
+                            #cq.join()
                         elif cmd == 'last':
                             print('result:', last_result)
                             print('error:', last_error)
+                            print('success:', last_success)
+                            print('exception:', last_exc)
                         else:
                             print("Unknown command.")
                     except Exception as e:
                         print(f"Error parsing command: {e}")
+                        print(traceback.format_exc())
             except KeyboardInterrupt as e:
                 raise e
             except BaseException as e:
@@ -660,156 +541,146 @@ async def command_handler(args, rq, cq):
         except asyncio.CancelledError:
             pass
         close_flag = 1
+        for name, job in running_jobs.items():
+            job['task'].cancel()
         if req_task is not None:
             req_task.cancel()
 
 
-event_loop = None
-request_task = None
-
-
-async def amain(args, rq, cq):
-    global event_loop, request_task
-    event_loop = asyncio.get_event_loop()
-    # event_loop.set_exception_handler(exception_handler)
-    request_task = asyncio.create_task(command_handler(args, rq, cq))
-    await request_task
-    request_task = None
-
-
-async def stop_request_task():
-    request_task.cancel()
-
-
-def async_handler(args, rq, cq):
-    asyncio.run(amain(args, rq, cq))
-
 
 #############################################################################
-#  GRAPH HANDLER
+#  METRICS HANDLER
 #############################################################################
 
-
-x = []
-y = []
-y2 = []
-n = 0
-close_flag = 0
+metrics_history = deque()
 
 
-def graph_handler(args, rq, cq):
-    global close_flag
-    global x, y, y2, n
-
-    def handle_close(evt):
-        global close_flag
-        close_flag = 1
-
-    plt.ion()
-    figure = plt.figure('Transactional Throughput Stress Test', figsize=(9, 6))
-    figure.canvas.mpl_connect('close_event', handle_close)
-    ax = figure.add_subplot()
-    ax.set_title('RESTCONF requests throughput')
-    ax.set_ylabel('Requests/second')
-    ax.set_xlabel('Seconds')
-    line, = ax.plot(x, y)
-    line2, = ax.plot(x, y)
-    plt.axis([0, 300, 0, args.yaxis])
-    ax.legend((line, line2), ('ok', 'nok'), loc='lower right', shadow=True)
-
-    t_prev = time.monotonic()
-
-    def func_animate():
-        nonlocal t_prev
-        global n, x, y, y2
-        results = rq.get()
-        l = len(results)
-        ok = 0
-        nok = 0
-        for r in results:
-            if r[1] == 'ok':
-                ok += 1
-            else:
-                nok += 1
-        t_now = time.monotonic()
-        elapsed = t_now-t_prev
-        y += [ok/elapsed]
-        y2 += [nok/elapsed]
-        n += 1
-
-        if len(y) <= 300:
-            x += [n]
+async def summarize_results(results):
+    ok = 0
+    nok = 0
+    for ts, r in results:
+        if r[1] == 'ok':
+            ok += 1
         else:
-            y.pop(0)
-            y2.pop(0)
+            nok += 1
+    return ok, nok
 
-        line.set_data(x, y)
-        line2.set_data(x, y2)
+async def metrics_handler(args, rq):
+    global close_flag, metrics_history
 
+    # Current strategy is all items from the queue once per second and assume
+    # the this task is able to do that. If not, we need to change the strategy.
+
+    t_prev = time.time()
+    while close_flag == 0:
+        # Update every second
+        nt = time.time()
+        await asyncio.sleep(1)
+        try:
+            ok = nok = 0
+            results = []
+            while True:
+                results.append(rq.get_nowait())
+        except asyncio.QueueEmpty:
+            ok, nok = await summarize_results(results)
+        t_now = time.time()
+        #print(f"OK: {ok} NOK: {nok} {t_now-t_prev:.2f} sec {len(metrics_history)}")
+        metric = (t_now, ok, nok)
+        metrics_history.append(metric)
+        await notifications.emit(ui_pb2.Metric(
+            timestamp=int(t_now),
+            ok=ok,
+            nok=nok
+        ))
+        if len(metrics_history) > args.history:
+            metrics_history.popleft()
         t_prev = t_now
 
-    t = time.monotonic()+2
-    while close_flag == 0:
-        # Update every two seconds
-        nt = time.monotonic()
-        if nt > t:
-            func_animate()
-            t = nt+2
-            figure.canvas.draw()  # draw the figure
-        time.sleep(0.1)  # wait a little bit of time
 
+#############################################################################
+#  UI GRPC API
+#############################################################################
+
+class ProdCons:
+    def __init__(self):
+        self.consumers = []
+
+    async def emit(self, notif):
+        for s in self.consumers:
+            await s.put(notif)
+
+    def subscribe(self):
+        q = asyncio.Queue()
+        self.consumers.append(q)
+        return q
+
+    def unsubscribe(self, q):
+        self.consumers.remote(q)
+
+
+class UIServicer(ui_pb2_grpc.UIServicer):
+
+    def __init__(self, args) -> None:
+        self.args = args
+
+    async def Get(self, request: ui_pb2.GetRequest,
+                   unused_context) -> ui_pb2.GetResponse:
+        global metrics_history
+        response = ui_pb2.GetResponse()
+        for timestamp, ok, nok in metrics_history:
+            metric = ui_pb2.Metric(
+                timestamp=int(timestamp),
+                ok=ok,
+                nok=nok
+            )
+            response.metrics.append(metric)
+        return response
+    
+    async def Subscribe(self, request: ui_pb2.Empty, unused_context):
+        q = notifications.subscribe()
         try:
-            c = cq.get(block=False)
-            if c['cmd'] == 'zoom':
-                if c['y'] == 0:
-                    maxy = int(max(max(y), max(y2))*1.2)
-                else:
-                    maxy = c['y']
-                if maxy == 0:
-                    maxy = 100
-                plt.axis([0, 300, 0, maxy])
-                figure.canvas.draw()  # draw the figure
-            elif c['cmd'] == 'clear':
-                x = []
-                y = []
-                y2 = []
-                n = 0
-            cq.task_done()
-        except queue.Empty:
-            pass
+            while True:
+                notif = await q.get()
+                yield notif
+        except Exception as e:
+            print(e)
+        finally:
+            print("Subscribe stopped")
 
-        figure.canvas.flush_events()  # flush the GUI events for the figure.
 
-        if close_flag == 1:
-            break
-
+notifications = ProdCons()
 
 #############################################################################
 #  MAIN
 #############################################################################
 
-def main(args):
-    global close_flag
+close_flag = 0
 
+async def amain(args, rq, cq):
+    global request_task
+    request_task = asyncio.create_task(command_handler(args, rq, cq))
+    metrics_task = asyncio.create_task(metrics_handler(args, rq))
+
+    server = grpc.aio.server()
+    ui_pb2_grpc.add_UIServicer_to_server(UIServicer(args), server)
+    server.add_insecure_port('[::]:50052')
+    await server.start()
+    ui_api = asyncio.create_task(server.wait_for_termination())
+    await asyncio.wait([request_task, metrics_task, ui_api], return_when=asyncio.FIRST_COMPLETED)
+    request_task = None
+    await server.stop(None)
+    await server.wait_for_termination()
+
+async def stop_request_task():
+    request_task.cancel()
+
+
+def main(args):
+    global global_parameters
     global_parameters['host'] = args.host
 
-    rq = DataQueue(maxsize=8192)
-    cq = queue.Queue()
-
-    async_thread = Thread(target=async_handler, args=(args, rq, cq))
-    async_thread.start()
-
-    try:
-        graph_handler(args, rq, cq)
-    except KeyboardInterrupt:
-        pass
-
-    if request_task:
-        asyncio.run_coroutine_threadsafe(stop_request_task(), event_loop)
-    print('stopped')
-
-    close_flag = 1
-    sys.exit(0)
+    rq = asyncio.Queue(maxsize=8192)
+    asyncio.run(amain(args, rq, None))
 
 
 if __name__ == '__main__':

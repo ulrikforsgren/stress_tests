@@ -56,7 +56,7 @@ request_id = 0
 
 
 async def restconf_request(args, client, host, op, resource, data=None,
-                           resource_type='data', params=None):
+                           resource_type='data', query_parameters=None):
     global request_id
     request_id += 1
     rid = request_id
@@ -70,7 +70,7 @@ async def restconf_request(args, client, host, op, resource, data=None,
             if data is not None:
                 data = data.encode('utf-8')
             async with client.request(method, url, headers=HEADERS_JSON,
-                                    data=data, params=params) as response:
+                                    data=data, params=query_parameters) as response:
                 if response.status in [201, 204]:
                     data = None  # No content is expected.
                 else:
@@ -83,16 +83,16 @@ async def restconf_request(args, client, host, op, resource, data=None,
         except Exception as e:
             return (rid, 'exception', repr(e))
     else:
-        return (rid, 'ok', 418, 'dry-run')
+        return (rid, 'ok', 418, 'dry-run') # I'm a teapot (RFC 2324, means no request is sent)
 
 
-async def single_request(host, op, url, data=None):
+async def single_request(host, op, resource, data=None):
     conn = aiohttp.TCPConnector(limit=0)
     client = aiohttp.ClientSession(connector=conn)
     resp = await restconf_request(client,
                                   host,
                                   op,
-                                  url,
+                                  resource,
                                   data=json.dumps(data))
     await client.close()
     return resp

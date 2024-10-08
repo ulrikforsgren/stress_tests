@@ -119,7 +119,6 @@ parameters = Parameters({
 })
 """
 
-# TODO: Fix how __repr__, __str__ and current are used.
 class Parameter:
     def __init__(self, keep_state=False):
         self.keep_state = keep_state
@@ -333,32 +332,52 @@ class RandomString(RandomParameter):
         return f'RandomString(length={self.length})'
 
 
+class ContextValue(Parameter):
+    def __init__(self, values, format, attr):
+        super(ContextValue, self).__init__()
+        self.values = values
+        self.format = format
+        self.attr = attr
+
+    def __copy__(self):
+        return self.__class__(self.values, self.format)
+    
+    def __str__(self):
+        raise NotImplementedError("ContextValue should not be converted to string")
+        
+    def get(self, parameters, key):
+        try:
+            name = re_sub.sub(lambda m: str(parameters[m.group(1)]), self.format)
+            inst = self.values[name]
+            return inst[self.attr]
+        except Exception as e:
+            print(f'ERROR: {e}')
+            print(f'ERROR: {self.format}')
+            return "ERROR"
+
+    def current(self):
+        return f'ContextValue(key={self.key})'
+
+
 class Calc:
     def __init__(self, key, wrap, mul, add):
         self.key = key
         self.wrap = wrap
         self.mul = mul
         self.add = add
-    def val(self, params):
-        i = params[self.key].n
+    def val(self, parameters):
+        i = parameters[self.key].n
         o = i//self.wrap*self.mul+self.add
         return str(o)
     
     
 """
 class Parameters makes it possible provide parameters in the form of <<x>> in
-url and data strings.
+resource and data strings.
 """
 
 
 class Parameters(dict):
-    def __str__(self):
-        s = 'Parameters {\n'
-        for k, v in self.items():
-            s += f'    {k}: {v}\n'
-        s += '}'
-        return s
-    
     def set(self, d):
         for k, v in d.items():
             if k in self:
@@ -397,11 +416,6 @@ class Parameters(dict):
                 self.update({k: v})
         else:
             raise TypeError(f'Invalid type: {type(cmd_p)}')
-
-    def update(self, kv):
-        for k,v in kv.items():
-            if isinstance(self[k], Parameter):
-                self[k].set(v)
 
     def reset(self):
         for v in self.values():
@@ -474,17 +488,17 @@ async def stress_requests_batch(args, n, n_p, setup, teardown, task, req, parame
 #
 
 
-async def stress_requests_window(args, n, n_p, setup, teardown, task, req, parameters, request_cb=None):
+async def stress_requests_window(args, n, n_p, setup, teardown, task, task_args, parameters, request_cb=None):
     results = []
     tasks = set()
-    await setup(req)
-    conn = req['client']._connector
+    await setup(task_args)
+    conn = task_args['client']._connector
     if not args.dry_run:
-        await conn.setup_pool_connections(conn, req['host'], n_p)
+        await conn.setup_pool_connections(conn, task_args['host'], n_p)
 
     st = time.monotonic()
     for _ in range(0, min(n, n_p)):
-        tasks.add(asyncio.create_task(task(args, parameters, **req)))
+        tasks.add(asyncio.create_task(task(args, parameters, **task_args)))
     n -= min(n, n_p)  # Started initial tasks
 
     while len(tasks) > 0:
@@ -498,18 +512,18 @@ async def stress_requests_window(args, n, n_p, setup, teardown, task, req, param
         a = n_p-len(pending)  # Calculate number of free task slots
         tasks_to_start = min(a, n)
         for _ in range(0, tasks_to_start):  # Start tasks in available slots
-            pending.add(asyncio.create_task(task(args, parameters, **req)))
+            pending.add(asyncio.create_task(task(args, parameters, **task_args)))
         n -= tasks_to_start
         tasks = pending
     elapsed = time.monotonic()-st
-    await teardown(req)
+    await teardown(task_args)
     return elapsed, results
 
 
-async def single_request(args, req, parameters, setup=setup, teardown=teardown):
+async def single_request(args, task_args, parameters, setup=setup, teardown=teardown):
     # Setup connection pool
-    await setup(req)
-    result = await default_task(args, parameters, **req)
+    await setup(task_args)
+    result = await default_task(args, parameters, **task_args)
     # Cleanup connection pool
     await teardown(args)
     return result
@@ -517,41 +531,43 @@ async def single_request(args, req, parameters, setup=setup, teardown=teardown):
 
 async def setup_task(args, client, host):
     # Reading an arbitrary leaf to force the client to setup a connection.
-    url = '/tailf-ncs:devices/global-settings/read-timeout'
+    resource = '/tailf-ncs:devices/global-settings/read-timeout'
     op = 'read'
     st = time.monotonic()
     resp = await restconf_request(args, client,
                                   host,
                                   op,
-                                  url)
+                                  resource)
     elapsed = time.monotonic()-st
     return (*resp, elapsed)
 
 
-re_sub = re.compile(r'<<(\w+)>>')
-
-
-async def default_task(args, parameters, client=None, host='', op='',
-                       url='', data='', resource_type='data', params=None):
-    def update_str(key):
+def format_parameters(parameters, string):
+    re_sub = re.compile(r'<<(\w+)>>')
+    def update_str(parameters, key):
         p = parameters[key]
         if isinstance(p, Parameter):
             return p.update_str()
         if isinstance(p, Calc):
             return p.val(parameters)
         return str(p)
-    url = re_sub.sub(lambda m: update_str(m.group(1)), url)
-    data = re_sub.sub(lambda m: update_str(m.group(1)), data)
+    return re_sub.sub(lambda m: update_str(parameters, m.group(1)), string)
+
+async def default_task(args, parameters, client=None, host='', op='',
+                       resource='', data='', resource_type='data', query_parameters=None):
+
+    resource = format_parameters(parameters, resource)
+    data = format_parameters(parameters, data)
     parameters.update_request()
     st = time.monotonic()
     resp = await restconf_request(args,
                                   client,
                                   host,
                                   op,
-                                  url,
+                                  resource,
                                   data,
                                   resource_type,
-                                  params)
+                                  query_parameters)
     elapsed = time.monotonic()-st
     return (*resp, elapsed)
 
@@ -608,9 +624,9 @@ def set_flags(args, req):
         flags['no-networking'] = 'true'
     if args.commit_queue:
         flags['commit-queue'] = 'sync'
-    if 'params' in req:
-        req['params'].update(flags)
-    req['params'] = flags
+    if 'query_parameters' in req:
+        req['query_parameters'].update(flags)
+    req['query_parameters'] = flags
 
 
 def do_test(args, n, n_p, req, parameters, task=None, request_cb=None):
@@ -631,8 +647,8 @@ def do_test(args, n, n_p, req, parameters, task=None, request_cb=None):
 #
 def run_test_in_subprocess(args, func, n, n_p, req, parameters, task=None, do_print=False):
     req = copy.deepcopy(req)
-    params = copy.deepcopy(parameters)
-    result = func(args, n, n_p, req, params, task)
+    parameters = copy.deepcopy(parameters)
+    result = func(args, n, n_p, req, parameters, task)
     elapsed, count, total, count_wrong, count_exc, results = result
     if count:
         average = total/count
@@ -676,7 +692,7 @@ def run_tests(args, which, tests, parameters, n, max_p, task=None, do_print=Fals
     if '__info' in tests:
         info = tests['__info']
         if 'name' in info:
-            name = info['name'].format_map(parameters)
+            name = format_parameters(parameters, info['name'])
             if args.highlight:
                 print(ansi.BOLD, end='')
                 print(ansi.REVERSE, end='')
