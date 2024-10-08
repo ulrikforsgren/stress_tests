@@ -8,6 +8,7 @@
 - Wrap random sequence after n requests.
 - Better back propagation mechanism for results.
   - Handle multiprocessing, threading and asyncio
+  - aiopipe
 - Handle change in concurrency.
 
 ### Medium Priority
@@ -32,26 +33,59 @@
 
 - How to push services and wait for them to complete.
 - Copy cisco-ios-cli-3.o0 NED from distribution.
-- Update ContextValue to read from NSO
+- Update ContextValue to read from NSO.
 - Support save/restore state.
 - Pause job? (must be implemented per job type e.g sliding_window)
 - Objectify restconf_api etc.
-- Rename Calc
-  - Make overridable
-  - Simplify usage
+- Rename Calc.
+  - Make overridable.
+  - Simplify usage.
   - Generic design pattern (resuability etc.)
 - Move away from **task_args?
 - Separate intent parameters and metrics?
 - Show last/current value of Parameters for "show" command.
 - Write ongoing op before stress requests (progress bar?)
 - Color stress tests output.
-- Color parameters output for readability
+- Color parameters output for readability.
 - Improve coloring of output.
 - Better formatting of title in HTML.
-- Print last value for all Parameters
-- Export metrics from benchmarking-nso
+- Print last value for all Parameters.
+- Export metrics from benchmarking-nso.
+- Auto scale concurrency to maintain requests-per-second.
+- Make grpc port (50052) configurable.
 
 
 
+## Completed
 
 - Update parameters comments for all tests ✅
+
+
+
+## Notes:
+
+Executors:
+- stress_requests_batch (unused)
+- stress_requests_window
+- single_request
+- sliding_window_executor (benchmarking-nso)
+- throttling_executor (benchmarking-nso)
+
+Tasks:
+- default_task
+
+Runners:
+- run_test
+  - run_tests
+    - run_test_in_subprocess
+      - do_test
+         (stress_requests_window)
+  - run_single_test
+- run_crud_tests (not used)
+- benchmarking-nso
+- ssts_scale_test
+
+ArgParsers:
+- benchmarking-nso
+- stress_tests
+- ssts_scale_test
