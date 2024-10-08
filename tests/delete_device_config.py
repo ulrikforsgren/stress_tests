@@ -35,7 +35,7 @@ class PopRequest(Sequence):
 #
 
 parameters = Parameters({
-    "name": PopRequest(devices),
+    "dname": PopRequest(devices),
 })
 
 
@@ -47,7 +47,7 @@ CRUD_TESTS = {
     'del-config':
         {
             'op': 'action',
-            'resource': '/tailf-ncs:devices/device={name}/delete-config',
+            'resource': '/tailf-ncs:devices/device=<<dname>>/delete-config',
         },
 }
 

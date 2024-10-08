@@ -33,7 +33,7 @@ parameters = Parameters({
 CRUD_TESTS = {
     '__info':
         {
-            'name': 'Python based service with a configurable delay ({delay}ms) and vlans ({numvlan} vlans)',
+            'name': 'Python based service with a configurable delay (<<delay>> ms) and vlans (<<numvlan>> vlans)',
         },
     'clean':
         {

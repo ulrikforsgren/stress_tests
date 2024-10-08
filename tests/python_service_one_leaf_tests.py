@@ -24,16 +24,17 @@ from stress_testing.stress_testing import (
 parameters = Parameters({
     'prefix': 'S',
     'sid': SequenceRequest(0),
+    'did': SequenceRequest(0),
     'data': RandomValue(0, 4000000000),
     'delay': 100,
-    'num-vlan': 1
+    'numvlan': 1
 })
 
 
 CRUD_TESTS = {
     '__info':
         {
-            'name': 'Python based service with a configurable delay ({delay}ms) and vlans ({numvlan} vlans)',
+            'name': 'Python based service with a configurable delay (<<delay>> ms) and vlans (<<numvlan>> vlans)',
             'parameters': parameters
         },
     'clean':
@@ -60,9 +61,9 @@ CRUD_TESTS = {
                         "service":{
                             "name":"<<prefix>><<sid>>",
                             "delay":"<<delay>>",
-                            "device":"r<<id>>",
+                            "device":"r<<did>>",
                             "template":"one-leaf",
-                            "str-value":"String data <<id>>",
+                            "str-value":"String data <<sid>>",
                             "num-vlan":"<<numvlan>>"
                         }
                     },
