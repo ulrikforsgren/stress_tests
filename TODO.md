@@ -5,11 +5,13 @@
 ### High Priority
 - Fix how __repr__, __str__ and current are used in class Parameter etc.
 - Fix how values are update between requests e.g random values.
+  - Refactor Parameters to support predictable sequences with multiple sequences incl. pseudo 
+    random sequences.
 - Wrap random sequence after n requests.
 - Better back propagation mechanism for results.
   - Handle multiprocessing, threading and asyncio
-  - aiopipe
-- Handle change in concurrency.
+  - ayncio.Queue compatible wrapper for multiprocessing.Queue and queue.Queue
+    - Works with both asyncio and plain Python.
 
 ### Medium Priority
 - Catch exception(s) and KeyBoardInterrupt
@@ -23,8 +25,6 @@
 - Support RequestBatch even for sliding_window_executor
 - Choose batch or sliding window
 - Log results to file (csv).
-- Refactor Parameters to support predictable sequences with multiple sequences incl. pseudo 
-  random sequences.
 - Improve dry-run echo
   - Show URL, URL + intent, intent
 - Write annotations to Grafana
@@ -58,7 +58,8 @@
 
 ## Completed
 
-- Update parameters comments for all tests ✅
+- Update parameters comments for all tests. ✅
+- Handle change in concurrency. ✅
 
 
 
