@@ -347,7 +347,7 @@ class ContextValue(Parameter):
         
     def get(self, parameters, key):
         try:
-            name = re_sub.sub(lambda m: str(parameters[m.group(1)]), self.format)
+            name = format_parameters(parameters, self.format)
             inst = self.values[name]
             return inst[self.attr]
         except Exception as e:
