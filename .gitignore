@@ -5,9 +5,8 @@ logs/
 packages/
 state/
 storedstate
-follower/
 venv/
-local-files/
+rollback/
 pkg-repo/*/load-dir
 pkg-repo/*/private-jar
 pkg-repo/*/shared-jar
@@ -21,8 +20,4 @@ pkg-repo/**/build-meta-data.xml
 pkg-repo/BUILT
 SINGLE-BUILD
 README.ncs
-reference_tests/
-oe/
-results/
-rollback/
-test-results/
+
