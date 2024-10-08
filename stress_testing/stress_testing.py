@@ -573,31 +573,6 @@ async def default_task(args, parameters, client=None, host='', op='',
     elapsed = time.monotonic()-st
     return (*resp, elapsed)
 
-#
-# Assert that all results are "ok"
-#
-
-
-def assert_ok(results):
-    assertion = True
-    for r in results:
-        rid, res, *rest = r
-        if res == 'ok':
-            pass
-        elif res == 'nok':
-            st, data, el = rest
-            print(
-                f"ERROR: wrong status returned {rid}: {st} != {expected_status}")
-            print(data)
-            assertion = False
-        elif res == 'exception':
-            exc, = rest
-            print(f"ERROR: exception {rid}: {exc}")
-            assertion = False
-        else:
-            raise Exception(f"Invalid return result {rid}: {res}")
-    assert assertion
-
 
 # Calculate the average execution time for all "ok" requests and
 # count number of result types "ok"/"nok"/"exception".

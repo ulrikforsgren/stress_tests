@@ -7,17 +7,11 @@ import asyncio
 from collections import deque
 from datetime import datetime, timedelta
 import importlib.util
-import io
 import json
 import os
 import pprint as pp
-import queue
-import random
 import re
-import socket
-import sys
 import time
-from threading import Thread
 import traceback
 
 from prompt_toolkit.patch_stdout import patch_stdout
@@ -73,7 +67,7 @@ last_success = None
 last_exc = None
 
 
-async def sliding_window_executor(q, task_function, task_args):
+async def sliding_window_executor(result_queue, task_function, task_args):
     global close_flag, last_result, last_error, last_success, last_exc
     await setup(task_args)
     try:
@@ -112,9 +106,9 @@ async def sliding_window_executor(q, task_function, task_args):
                 else:
                     parameters['exc'] += 1
                     last_exc = last_result
-                if parameters['add_to_metrics']:
+                if parameters['add_to_metrics'] and result_queue is not None:
                     # Push results to metrics_handler
-                    await q.put((time.time(), result))
+                    await result_queue.put((time.time(), result))
             # Start new tasks to keep a total of concurrency number of tasks running.
             # Calculate number of free task slots
             if more_requests:
@@ -142,7 +136,10 @@ async def sliding_window_executor(q, task_function, task_args):
 #  THROTTLING JOB EXECUTOR
 #############################################################################
 
-async def throttling_executor(q, task_function, task_args):
+# TODO:
+#  - Separate dict for metrics.
+#  - Handle metrics in functions.   
+async def throttling_executor(result_queue, task_function, task_args):
     global close_flag, last_result, last_error, last_success, last_exc
     await setup(task_args)
     try:
@@ -156,15 +153,16 @@ async def throttling_executor(q, task_function, task_args):
         parameters['exc'] = 0
         req_count = 0
 
-        # NOTE: Only one concurrent task is supported
 
         # Start initial concurrency number of tasks
         stop = parameters.get('stop', 0)
-        for _ in range(0, parameters['concurrency']):
+        rps = parameters.get('requests-per-second', 0)
+        concurrency = parameters.get('concurrency', 1)
+        for _ in range(0, concurrency):
             tasks.add(asyncio.create_task(task_function(**task_args)))
+            await asyncio.sleep(1/(rps/concurrency))
             req_count += 1
             if stop > 0 and req_count >= stop:
-                more_requests = False
                 break
 
         while not close_flag and len(tasks) > 0:
@@ -173,6 +171,7 @@ async def throttling_executor(q, task_function, task_args):
             rps = parameters.get('requests-per-second', 0)
             add_to_metrics = parameters.get('add_to_metrics', False)
             concurrency = parameters.get('concurrency', 1)
+            new_task_delays = []
             for d in done:
                 global_parameters['requests-count'] += 1
                 parameters['requests-count'] += 1
@@ -188,16 +187,19 @@ async def throttling_executor(q, task_function, task_args):
                 else:
                     parameters['exc'] += 1
                     last_exc = last_result
-                if add_to_metrics:
+                if add_to_metrics and result_queue is not None:
                     # Push results to metrics_handler
-                    await q.put((time.time(), result))
+                    await result_queue.put((time.time(), result))
 
                 d = 1/(rps/concurrency)-rtime if rps>0 else 0
                 if d < 0:
                     # This means that concurrency may need to be increased
                     parameters['task-wait-dept'] -= d
-                # Start tasks in available slots
+                new_task_delays.append(d)
+            # Start tasks in available slots (if any)
+            for _ in range(concurrency-len(tasks)):
                 if stop == 0 or req_count < stop:
+                    d = new_task_delays.pop(0) if new_task_delays else 0
                     async def new_task():
                         if d > 0:
                             await asyncio.sleep(d)
@@ -234,6 +236,7 @@ global_parameters = {
     'stop': 0  # Run job until stopped
 }
 
+
 def get_jobs():
     jobs_directory_path = f'{os.path.dirname(os.path.abspath(__file__))}/jobs'
     files = os.listdir(jobs_directory_path)
@@ -250,6 +253,7 @@ def get_jobs():
                 jobs[module_name] = module.job
 
     return jobs
+
 
 async def job(args, ctx, rq, data, extra_params={}):
     try:
