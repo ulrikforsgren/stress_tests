@@ -60,6 +60,12 @@ def parseArgs(args=None, extra_cmds=[], options='old-crud', path=None):
         options += ['single']
     if 'benchmarking' in options:
         options += ['basic']
+    if 'scripted' in options:
+        options += [
+            'basic',
+            'state'
+        ]
+        commands += ['clean', 'run']
     parser = argparse.ArgumentParser()
     if commands:
         parser.add_argument('cmd', nargs='+', choices=commands + extra_cmds)

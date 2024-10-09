@@ -18,6 +18,7 @@ from rich.text import Text
 
 
 from stress_testing.stress_testing import (
+    parseArgs,
     Parameters,
     Sequence,
     RandomString,
@@ -104,39 +105,6 @@ DELETE = {
     'resource': '/python-service:python-service/'+
                 'python-service:service=<<sid>>'
 }            
-
-#
-# Command line arguments
-#
-
-
-def parseArgs(args=None, extra_actions=[]):
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--host', type=str,
-                        help='host[:port]',
-                        default='localhost:8080')
-    parser.add_argument('cmd', nargs='+', choices=['clean', 'run', 'clean'])
-    parser.add_argument("--dry-run", required=False, action='store_true', default=False,
-                        help="Run sequence but do not send request over network.")
-    parser.add_argument("--echo", required=False, action='store_true', default=False,
-                        help="Echo request to console.")
-    parser.add_argument("--keep-state", required=False, action='store_true', default=False,
-                        help="Loads state if state files exist and saves after run.")
-    # parser.add_argument("-n", required=False, type=int,
-    #                     help='Number of total requests.')
-    # parser.add_argument("-w", required=False, type=int, default=40,
-    #                     help='Max window size. Starting 1, 2, 5, .., max')
-    # parser.add_argument("-s", required=False, type=str,
-    #                     help='Window size(s) comma sepated.')
-    # parser.add_argument("-p", required=False, type=str, action='append',
-    #                     help='Alter parameters.')
-    parser.add_argument("-v", required=False, action='store_true',
-                        default=False, help='Verbose mode. Show result of each request.')
-    # parser.add_argument("-o", required=False, type=str,
-    #                     help='Output result in json format to file.')
-    # parser.add_argument("--highlight", required=False, action='store_true',
-    #                     default=False, help='Highlight output to make it more readable.')
-    return parser.parse_args(args)
 
 
 #
@@ -392,4 +360,4 @@ def main(args):
     else:
         print('Unknown command:', args.cmd[0])
 if __name__ == '__main__':
-    main(parseArgs())
+    main(parseArgs(options='scripted'))
