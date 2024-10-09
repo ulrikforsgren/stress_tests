@@ -24,7 +24,7 @@ from stress_testing.stress_testing import (
     Calc,
     do_test
 )
-from create_devices import create_device, find_capabilities
+from device_manager import create_device, find_capabilities
 
 
 # TODO:
@@ -253,7 +253,7 @@ def wait_for_cpu_to_idle(p, threshold=5, progress_cb=None):
 #
 
 # NOTE: Should n, n_p be part of the parameters?
-def run_test(args, intent, n, n_p, parameters, task=None, progress_cb=None):
+def run_test(args, intent, n, n_p, parameters, progress_cb=None):
     # TODO: Move host to context?
     intent['host'] = args.host
     parameters['concurrency'] = n_p
@@ -277,10 +277,9 @@ def run_test(args, intent, n, n_p, parameters, task=None, progress_cb=None):
             progress_cb(f' {c}/{n}  ok: [green]{ok}[/green] nok: [red]{nok}[/red] exc: [yellow]{exc}[/yellow]')
 
 
-    elapsed, ok, total, nok, exc, results = do_test(
-        args, intent, parameters, request_cb=request_cb)
+    elapsed, ok, total, nok, exc, _results = do_test(
+        args, intent, parameters, want_results=True, request_cb=request_cb)
     #parameters.save_state()
-
     return ((elapsed, ok, nok, exc), f'{n} requests, {n_p} concurrent  ok: [green]{ok}[/green] nok: [red]{nok}[/red] exc: [yellow]{exc}[/yellow]')
 
 

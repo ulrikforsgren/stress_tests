@@ -524,54 +524,13 @@ async def batch_executor(args, task_args, parameters, setup_func=setup,
     elapsed = time.monotonic()-st
     return elapsed, results
 
-#
-# n_p connections are setup and new requests and sent as a connection
-# becomes available.
-#
-
 
 async def sliding_window_executor(args, task_args, parameters,
-                                setup_func=setup, teardown_func=teardown,
-                                task_func=None, request_cb=None):
-    task_func = task_func or default_task
-    results = []
-    tasks = set()
-    n = parameters.get('stop', 1)
-    n_p = parameters.get('concurrency', 1)
-    await setup_func(task_args)
-    conn = task_args['client']._connector
-    if not args.dry_run:
-        await conn.setup_pool_connections(conn, task_args['host'], n_p)
-
-    st = time.monotonic()
-    for _ in range(0, min(n, n_p)):
-        tasks.add(asyncio.create_task(task_func(args, parameters, **task_args)))
-    n -= min(n, n_p)  # Started initial tasks
-
-    while len(tasks) > 0:
-        done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
-        for d in done:
-            result = await d
-            results.append(result)
-            if request_cb:
-                request_cb(result)
-
-        a = n_p-len(pending)  # Calculate number of free task slots
-        tasks_to_start = min(a, n)
-        for _ in range(0, tasks_to_start):  # Start tasks in available slots
-            pending.add(asyncio.create_task(task_func(args, parameters, **task_args)))
-        n -= tasks_to_start
-        tasks = pending
-    elapsed = time.monotonic()-st
-    await teardown_func(task_args)
-    return elapsed, results
-
-
-async def sliding_window_executor2(args, task_args, parameters,
-                              global_parameters, last,  
+                              global_parameters=None, last=None, want_results=True, 
                               setup_func=setup, teardown_func=teardown,
-                              task_func=default_task, result_queue=None):
-    await setup_func(task_args)
+                              task_func=default_task, result_queue=None, request_cb=None):
+    if setup_func is not None:
+        await setup_func(task_args)
     try:
         tasks = set()
 
@@ -582,6 +541,8 @@ async def sliding_window_executor2(args, task_args, parameters,
         parameters['exc'] = 0
         req_count = 0
 
+        task_func = task_func or default_task
+        start = time.monotonic()
 
         # Start initial concurrency number of tasks
         stop = parameters.get('stop', 0)
@@ -594,8 +555,10 @@ async def sliding_window_executor2(args, task_args, parameters,
             req_count += 1
             if stop > 0 and req_count >= stop:
                 break
-
-        while not global_parameters['close_flag'] and len(tasks) > 0:
+        # TODO: Must find a better way to handle close_flag
+        close_flag = 0
+        results = []
+        while not close_flag and len(tasks) > 0:
             done, tasks = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
             stop = parameters.get('stop', 0)
             rps = parameters.get('requests-per-second', 0)
@@ -603,20 +566,25 @@ async def sliding_window_executor2(args, task_args, parameters,
             concurrency = parameters.get('concurrency', 1)
             new_task_delays = []
             for d in done:
-                global_parameters['requests-count'] += 1
-                parameters['requests-count'] += 1
+                if global_parameters:
+                    global_parameters['requests-count'] += 1
                 result = await d
-                rid, rstatus, rcode, rresult, rtime = result
-                last['result'] = last_result = (datetime.now().isoformat(), result)
-                if rstatus == 'ok':
-                    parameters['ok'] += 1
-                    last['success'] = last_result
-                elif rstatus == 'nok':
-                    parameters['nok'] += 1
-                    last['error'] = last_result
-                else:
-                    parameters['exc'] += 1
-                    last_exc = last_result
+                if request_cb:
+                    request_cb(result)
+                if want_results:
+                    results.append(result)
+                _rid, rstatus, _rcode, _rresult, rtime = result
+                if last:
+                    last['result'] = last_result = (datetime.now().isoformat(), result)
+                    if rstatus == 'ok':
+                        parameters['ok'] += 1
+                        last['success'] = last_result
+                    elif rstatus == 'nok':
+                        parameters['nok'] += 1
+                        last['error'] = last_result
+                    else:
+                        parameters['exc'] += 1
+                        last_exc = last_result
                 if add_to_metrics and result_queue is not None:
                     # Push results to metrics_handler
                     await result_queue.put((time.time(), result))
@@ -636,7 +604,8 @@ async def sliding_window_executor2(args, task_args, parameters,
                         return await task_func(args, parameters, **task_args)
                     tasks.add(asyncio.create_task(new_task()))
                     req_count += 1
-
+            if global_parameters:
+                close_flag = global_parameters['close_flag']
     except asyncio.CancelledError:
         # TODO: More graceful shutdown and collect results?
         pass
@@ -644,11 +613,15 @@ async def sliding_window_executor2(args, task_args, parameters,
         print("EXCEPTION", e)
         # Print traceback
         print(traceback.format_exc())
+        raise e
     finally:
+        elapsed = time.monotonic()-start
         for t in tasks:
             t.cancel()
-        await teardown_func(task_args)
-        
+        if teardown_func is not None:
+            await teardown_func(task_args)
+    return elapsed, results
+
 
 async def single_request(args, task_args, parameters, setup_func=setup, 
                          teardown_func=teardown, task=default_task):
@@ -718,16 +691,19 @@ def set_flags(args, d):
         d['query_parameters'] = flags
 
 
-def do_test(args, task_args, parameters, task_func=None, request_cb=None):
+def do_test(args, task_args, parameters, want_results=True, task_func=None, request_cb=None):
     set_flags(args, task_args)
     elapsed, results = asyncio.run(
-        sliding_window_executor(args, task_args, parameters, task_func=task_func, request_cb=request_cb))
-    if args.v:
-        pprint(results)
+        sliding_window_executor(args, task_args, parameters, want_results=want_results, task_func=task_func, request_cb=request_cb))
+    if want_results:
+        if args.v:
+            pprint(results)
 
-    count, total, count_wrong, count_exc = calc_average(results)
+        # TODO: Refactor analysis of the results and want_results. No stats is returned when want_results is False.
+        count, total, count_wrong, count_exc = calc_average(results)
 
-    return elapsed, count, total, count_wrong, count_exc, results
+        return elapsed, count, total, count_wrong, count_exc, results
+    return elapsed
 
 
 #
@@ -736,7 +712,7 @@ def do_test(args, task_args, parameters, task_func=None, request_cb=None):
 def run_test_in_subprocess(args, test_func, task_args, parameters, task_func=None, do_print=False):
     task_args = copy.deepcopy(task_args)
     parameters = copy.deepcopy(parameters)
-    result = test_func(args, task_args, parameters, task_func)
+    result = test_func(args, task_args, parameters, task_func=task_func)
     elapsed, count, total, count_wrong, count_exc, results = result
     if count:
         average = total/count
@@ -801,7 +777,7 @@ def run_tests(args, which, tests, parameters, no_requests, max_concurrency, task
             task_args['host'] = args.host
             parameters['concurrency'] = n_p
             results.append((op, no_requests, n_p, run_test_in_subprocess(
-                args, do_test, task_args, parameters, task_func, do_print)))
+                args, do_test, task_args, parameters, task_func=task_func, do_print=do_print)))
         if args.highlight and r % 2 == 1:
             print(ansi.RST, end='')
     if args.o:
@@ -835,7 +811,7 @@ def run_single_test(args, tc, tests, parameters, task=None):
     if args.echo:
         print(str(parameters))
     elapsed, count, total, count_wrong, count_exc, results = do_test(
-        args, task_args, parameters, task)
+        args, task_args, parameters, task_func=task)
     if count:
         average = total/count
     else:

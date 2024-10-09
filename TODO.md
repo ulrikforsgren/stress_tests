@@ -3,7 +3,8 @@
 ## TODO
 
 ### Working on
-- Unify executors
+- Refactor handling of query_parameters for all runners.
+
 
 ### High Priority
 
@@ -19,9 +20,10 @@
   - ayncio.Queue compatible wrapper for multiprocessing.Queue and queue.Queue
     - Works with both asyncio and plain Python.
 
+
 ### Medium Priority
 - Handle ctrl-c
-- Catch exception(s) and KeyBoardInterrupt
+    - Catch exception(s) and KeyBoardInterrupt
 - Split stress_testing.py:
   - Executors
   - ArgParsers
@@ -29,9 +31,9 @@
   - Tasks
   - Etc.
 - Support RequestBatch even for sliding_window_executor
-- Choose batch or sliding window
 - Log results to file (csv).
 - Write annotations to Grafana
+
 
 ### Low Priority
 
@@ -56,7 +58,8 @@
 - Export metrics from benchmarking-nso.
 - Auto scale concurrency to maintain requests-per-second.
 - Make grpc port (50052) configurable.
-
+- Unify executors.
+  - Choose batch or sliding window.
 
 
 ## Completed
@@ -67,6 +70,8 @@
 - Improve dry-run echo. ✅
   - Show URL, URL + intent, intent. ✅
 - Unified terminology: intent/task_args, parameters, ... ✅
+- Unify executors. ✅
+  - Merge sliding_window_executors. ✅
 
 
 ## Notes:

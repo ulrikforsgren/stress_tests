@@ -21,7 +21,7 @@ from prompt_toolkit.history import FileHistory
 from prompt_toolkit.completion import Completer, Completion, NestedCompleter
 
 from stress_testing.stress_testing import (
-    sliding_window_executor2,
+    sliding_window_executor,
     Parameters,
     Sequence
 )
@@ -122,7 +122,10 @@ async def job(args, parameters, job_data, cmd_params=None, result_queue=None):
         task_args['host'] = global_parameters['host'] if 'host' not in task_args else task_args['host'] # Sometimes we set host as args.host. Why?
         parameters.update(job_parameters)
         parameters.set(cmd_params)
-        await sliding_window_executor2(args, task_args, parameters, global_parameters, last, result_queue=result_queue)
+        await sliding_window_executor(args, task_args, parameters,
+                                      global_parameters=global_parameters, last=last,
+                                      want_results=False,
+                                      result_queue=result_queue)
     except Exception as e:
         print(f"Error in job: {e}")
         print(traceback.format_exc())
