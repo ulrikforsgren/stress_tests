@@ -1,13 +1,10 @@
 #!/usr/bin/env python3
 # -*- mode: python; python-indent: 4 -*-
 
-
-import argparse
 import asyncio
 from collections import deque
 from datetime import datetime, timedelta
 import importlib.util
-import json
 import os
 import pprint as pp
 import re
@@ -21,6 +18,7 @@ from prompt_toolkit.history import FileHistory
 from prompt_toolkit.completion import Completer, Completion, NestedCompleter
 
 from stress_testing.stress_testing import (
+    parseArgs,
     sliding_window_executor,
     Parameters,
     Sequence
@@ -29,19 +27,6 @@ from stress_testing.stress_testing import (
 import grpc
 import ui_pb2
 import ui_pb2_grpc
-
-
-def parseArgs():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--host', type=str, default='localhost:8080',
-                        help='Host:Port to connect to.')
-    parser.add_argument('--history', type=int, default=3600,
-                         help='How many seconds to keep history data.')
-    parser.add_argument("--dry-run", required=False, action='store_true', default=False,
-                        help="Run sequence but do not send request over network.")
-    parser.add_argument("--echo", required=False, action='store_true', default=False,
-                        help="Echo request to console.")
-    return parser.parse_args()
 
 
 #############################################################################
@@ -92,8 +77,8 @@ last = {
 }
 
 
-def get_jobs():
-    jobs_directory_path = f'{os.path.dirname(os.path.abspath(__file__))}/jobs'
+def get_jobs(path):
+    jobs_directory_path = f'{os.path.dirname(os.path.abspath(__file__))}/{path}'
     files = os.listdir(jobs_directory_path)
     jobs = dict()
     for filename in files:
@@ -109,7 +94,6 @@ def get_jobs():
             else:
                 print(f"ERROR: Module {module_name} does not contain 'intent' or 'job' function")
                 sys.exit(1)
-
     return jobs
 
     
@@ -129,9 +113,6 @@ async def job(args, parameters, job_data, cmd_params=None, result_queue=None):
     except Exception as e:
         print(f"Error in job: {e}")
         print(traceback.format_exc())
-
-
-jobs = get_jobs()
 
 
 #############################################################################
@@ -229,35 +210,35 @@ class DictDictKeyCompleter(Completer):
                     if k.startswith(word):
                         yield Completion(k, start_position=-len(word))
 
-
-commands = {
-    "start": (set(jobs), "Start a named job."),
-    "stop": (DictKeyCompleter(running_jobs), "Stop named jobs."),
-    "exit": (None, "Exit program."),
-    "show": ({
-        'global': None,
-        'job': DictKeyCompleter(running_jobs),
-        'completed': DictKeyCompleter(completed_jobs)
-    }, "Show job parameters."),
-    "set": ({
-            'global': DictKeyCompleter(global_parameters),
-            'job': DictDictKeyCompleter(running_jobs)
-            }, "Set job parameters."),
-    "jobs": (None, "Show running jobs."),
-    "last": (None, "Show last request result and error."),
-    "clear": (None, "Clear graph data."),   # TODO: Fix for webui
-    "help": (None, "Show this help."),
-}
-
-
-completer = NestedCompleter.from_nested_dict({
-    cmd: cmpltr for cmd, (cmpltr, _) in commands.items()
-})
+def get_commands(jobs):
+    commands = {
+        "start": (set(jobs), "Start a named job."),
+        "stop": (DictKeyCompleter(running_jobs), "Stop named jobs."),
+        "exit": (None, "Exit program."),
+        "show": ({
+            'global': None,
+            'job': DictKeyCompleter(running_jobs),
+            'completed': DictKeyCompleter(completed_jobs)
+        }, "Show job parameters."),
+        "set": ({
+                'global': DictKeyCompleter(global_parameters),
+                'job': DictDictKeyCompleter(running_jobs)
+                }, "Set job parameters."),
+        "jobs": (None, "Show running jobs."),
+        "last": (None, "Show last request result and error."),
+        "clear": (None, "Clear graph data."),   # TODO: Fix for webui
+        "help": (None, "Show this help."),
+    }
+    completer = NestedCompleter.from_nested_dict({
+        cmd: cmpltr for cmd, (cmpltr, _) in commands.items()
+    })
+    return commands, completer
 
 
 async def command_handler(args, result_queue, cq):
-    global global_parameters, last
+    global global_parameters, last, jobs
     req_task = None
+    commands, completer = get_commands(jobs)
     cmd_history = FileHistory(".benchmarching_nso_history")
     with patch_stdout():
         session = PromptSession("benchmarking-nso> ", history=cmd_history)
@@ -534,12 +515,12 @@ async def stop_request_task():
 
 
 def main(args):
-    global global_parameters
+    global global_parameters, jobs
     global_parameters['host'] = args.host
-
+    jobs = get_jobs(args.path)
     rq = asyncio.Queue(maxsize=8192)
     asyncio.run(amain(args, rq, None))
 
 
 if __name__ == '__main__':
-    main(parseArgs())
+    main(parseArgs(options='benchmarking', path='jobs'))

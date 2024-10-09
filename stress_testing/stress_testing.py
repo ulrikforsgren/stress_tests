@@ -58,16 +58,18 @@ def parseArgs(args=None, extra_cmds=[], options='old-crud', path=None):
         commands += ['clean', 'create', 'read', 'update', 'delete', 'crud', 'cud']
     if 'old-crud' in options:
         options += ['single']
+    if 'benchmarking' in options:
+        options += ['basic']
     parser = argparse.ArgumentParser()
-    parser.add_argument('--host', type=str,
-                        help='host[:port]',
-                        default='localhost:8080')
     if commands:
         parser.add_argument('cmd', nargs='+', choices=commands + extra_cmds)
     if 'crud' in options:
         parser.add_argument('test', type=str,
                             help='Test to run.')
     if 'basic' in options:
+        parser.add_argument('--host', type=str,
+                            help='host[:port]',
+                            default='localhost:8080')
         parser.add_argument("--dry-run", required=False, action='store_true', default=False,
                             help="Run sequence but do not send request over network.")
         parser.add_argument("--echo", required=False, action='store_true', default=False,
@@ -105,6 +107,9 @@ def parseArgs(args=None, extra_cmds=[], options='old-crud', path=None):
                             help='Output results as graphs in html.')
         parser.add_argument("--open", required=False, action='store_true',
                             help='Open generated html.')
+    if 'benchmarking' in options:
+        parser.add_argument('--history', type=int, default=3600,
+                             help='How many seconds to keep history data.')
     if 'highlight' in options:
         parser.add_argument("--highlight", required=False, action='store_true',
                             default=False, help='Highlight output to make it more readable.')

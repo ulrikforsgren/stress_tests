@@ -3,11 +3,10 @@
 ## TODO
 
 ### Working on
-- Refactor handling of query_parameters for all runners.
-
+- Use common ParseArgs framework.
+    - ssts_scale_tests
 
 ### High Priority
-
 - Fix how __repr__, __str__ and current are used in class Parameter etc.
   - Print last value for all Parameters.
 
@@ -40,8 +39,9 @@
 - How to push services and wait for them to complete.
 - Copy cisco-ios-cli-3.o0 NED from distribution.
 - Update ContextValue to read from NSO.
+    - When task is started?
 - Support save/restore state.
-- Pause job? (must be implemented per job type e.g sliding_window)
+    - Pause job? (must be implemented per job type e.g sliding_window)
 - Objectify restconf_api etc.
 - Rename Calc.
   - Make overridable.
@@ -49,17 +49,17 @@
   - Generic design pattern (resuability etc.)
 - Move away from **task_args?
 - Separate intent parameters and metrics?
-- Show last/current value of Parameters for "show" command.
-- Write ongoing op before stress requests (progress bar?)
-- Color stress tests output.
-- Improve coloring of output.
-  - Color parameters output for readability.
-- Better formatting of title in HTML.
+- Improve output:
+    - Show last/current value of Parameters for "show" command.
+    - Write ongoing op before stress requests (progress bar?)
+    - Color stress tests output.
+    - Improve coloring of output.
+    - Color parameters output for readability.
+    - Better formatting of title in HTML.
 - Export metrics from benchmarking-nso.
 - Auto scale concurrency to maintain requests-per-second.
 - Make grpc port (50052) configurable.
-- Unify executors.
-  - Choose batch or sliding window.
+- Choose batch or sliding window executor.
 
 
 ## Completed
@@ -72,6 +72,11 @@
 - Unified terminology: intent/task_args, parameters, ... ✅
 - Unify executors. ✅
   - Merge sliding_window_executors. ✅
+- Create run_crud_test.py runner script
+    - Convert tests into job like Python files.
+- Use common ParseArgs framework. ✅
+    - tests ✅
+    - benchmarking-nso ✅
 
 
 ## Notes:
