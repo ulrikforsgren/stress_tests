@@ -41,47 +41,81 @@ class ansi:
     RED = '\033[91m'
 
 
-def parseArgs(args=None, extra_actions=[]):
+def parseArgs(args=None, extra_cmds=[], options='old-crud', path=None):
+    commands = []
+    if isinstance(options, str):
+        options = [options]
+    if {'old-crud', 'crud'}.intersection(options):
+        options += [
+            'basic',
+            'scale',
+            'params',
+            'commit-params',
+            'json',
+            'report',
+            'highlight',
+        ]
+        commands += ['clean', 'create', 'read', 'update', 'delete', 'crud', 'cud']
+    if 'old-crud' in options:
+        options += ['single']
     parser = argparse.ArgumentParser()
     parser.add_argument('--host', type=str,
                         help='host[:port]',
                         default='localhost:8080')
-    parser.add_argument('cmd', nargs='+', choices=['clean', 'create', 'read',
-                                                   'update', 'delete', 'crud', 'cud']
-                        + extra_actions)
-    parser.add_argument("--dry-run", required=False, action='store_true', default=False,
-                        help="Run sequence but do not send request over network.")
-    parser.add_argument("--echo", required=False, action='store_true', default=False,
-                        help="Echo request to console.")
-    parser.add_argument("--keep-state", required=False, action='store_true', default=False,
-                        help="Loads state if state files exist and saves after run.")
-    parser.add_argument("--single", required=False, action='store_true', default=False,
+    if commands:
+        parser.add_argument('cmd', nargs='+', choices=commands + extra_cmds)
+    if 'crud' in options:
+        parser.add_argument('test', type=str,
+                            help='Test to run.')
+    if 'basic' in options:
+        parser.add_argument("--dry-run", required=False, action='store_true', default=False,
+                            help="Run sequence but do not send request over network.")
+        parser.add_argument("--echo", required=False, action='store_true', default=False,
+                            help="Echo request to console.")
+        parser.add_argument("-q", required=False, action='store_true',
+                            default=False, help='Silent mode.')
+        parser.add_argument("-v", required=False, action='store_true',
+                            default=False, help='Verbose mode. Show result of each request.')
+    if 'state' in options:
+        parser.add_argument("--keep-state", required=False, action='store_true', default=False,
+                            help="Loads state if state files exist and saves after run.")
+    if 'single' in options:
+        parser.add_argument("--single", required=False, action='store_true', default=False,
                         help="Run one iteration of one operation with one windows size.")
-    parser.add_argument("-n", required=False, type=int,
-                        help='Number of total requests.')
-    parser.add_argument("-w", required=False, type=int, default=40,
-                        help='Max window size. Starting 1, 2, 5, .., max')
-    parser.add_argument("-s", required=False, type=str,
-                        help='Window size(s) comma sepated.')
-    parser.add_argument("-p", required=False, type=str, action='append',
-                        help='Alter parameters.')
-    parser.add_argument("--no-networking", required=False, action='store_true',
-                        default=False, help='Commit with no-networking.')
-    parser.add_argument("--commit-queue", required=False, action='store_true',
-                        default=False, help='Commit to commit-queue.')
-    parser.add_argument("-q", required=False, action='store_true',
-                        default=False, help='Silent mode.')
-    parser.add_argument("-v", required=False, action='store_true',
-                        default=False, help='Verbose mode. Show result of each request.')
-    parser.add_argument("-o", required=False, type=str,
-                        help='Output result in json format to file.')
-    parser.add_argument("--html", required=False, action='store_true',
-                        help='Output results as graphs in html.')
-    parser.add_argument("--open", required=False, action='store_true',
-                        help='Open generated html.')
-    parser.add_argument("--highlight", required=False, action='store_true',
-                        default=False, help='Highlight output to make it more readable.')
-    return parser.parse_args(args)
+    if 'scale' in options:
+        parser.add_argument("-n", required=False, type=int,
+                            help='Number of total requests.')
+        parser.add_argument("-w", required=False, type=int, default=40,
+                            help='Max window size. Starting 1, 2, 5, .., max')
+        parser.add_argument("-s", required=False, type=str,
+                            help='Window size(s) comma sepated.')
+    if 'params' in options:
+        parser.add_argument("-p", required=False, type=str, action='append',
+                            help='Alter parameters.')
+    if 'commit-params' in options:
+        parser.add_argument("--no-networking", required=False, action='store_true',
+                            default=False, help='Commit with no-networking.')
+        parser.add_argument("--commit-queue", required=False, action='store_true',
+                            default=False, help='Commit to commit-queue.')
+    if 'json' in options:
+        parser.add_argument("-o", required=False, type=str,
+                            help='Output result in json format to file.')
+    if 'report' in options:
+        parser.add_argument("--html", required=False, action='store_true',
+                            help='Output results as graphs in html.')
+        parser.add_argument("--open", required=False, action='store_true',
+                            help='Open generated html.')
+    if 'highlight' in options:
+        parser.add_argument("--highlight", required=False, action='store_true',
+                            default=False, help='Highlight output to make it more readable.')
+    if path:
+        parser.add_argument("--path", required=False, type=str, action='append',
+                            default=path, help='Path to search for modules.')
+    
+    parsed_args = parser.parse_args(args)
+    if 'state' not in options:
+        parsed_args.keep_state = False
+    return parsed_args
 
 
 # Function to replace any of the characters in the string s with the character c
@@ -740,7 +774,7 @@ def np_gen(max_p):
         m *= 10
 
 
-def run_tests(args, which, tests, parameters, no_requests, max_concurrency, task_func=None, do_print=False):
+def run_tests(args, testcases, tests, parameters, no_requests, max_concurrency, task_func=None, do_print=False):
     no_requests = args.n or no_requests
 
     max_concurrency = min(max_concurrency, no_requests)
@@ -754,7 +788,7 @@ def run_tests(args, which, tests, parameters, no_requests, max_concurrency, task
 
     print()
     parameters.update_cmdline(args.p)
-    parameters['stop'] = args.n
+    parameters['stop'] = no_requests
     if '__info' in tests:
         info = tests['__info']
         if 'name' in info:
@@ -771,7 +805,7 @@ def run_tests(args, which, tests, parameters, no_requests, max_concurrency, task
     for r, n_p in enumerate(n_ps):
         if args.highlight and r % 2 == 1:
             print(ansi.DIM, end='')
-        for op in which:
+        for op in testcases:
             task_args = tests[op]
             # TODO: Should host be in task_args? parameters is better?
             task_args['host'] = args.host
@@ -796,11 +830,7 @@ def run_tests(args, which, tests, parameters, no_requests, max_concurrency, task
     return results
 
 
-def run_crud_tests(args, tests, parameters, no_requests, max_concurrency, task_func=None, do_print=False):
-    return run_tests(args, ['create', 'read', 'update', 'delete'], tests, no_requests, max_concurrency, task_func, do_print)
-
-
-def run_single_test(args, tc, tests, parameters, task=None):
+def run_single_test(args, tc, tests, parameters, task_func=None):
     n = args.n or 1
     n_p = args.w or 1
     task_args = tests[tc]
@@ -811,7 +841,7 @@ def run_single_test(args, tc, tests, parameters, task=None):
     if args.echo:
         print(str(parameters))
     elapsed, count, total, count_wrong, count_exc, results = do_test(
-        args, task_args, parameters, task_func=task)
+        args, task_args, parameters, task_func=task_func)
     if count:
         average = total/count
     else:
@@ -831,8 +861,10 @@ def run_single_test(args, tc, tests, parameters, task=None):
 
     return (args.cmd, n, n_p, (elapsed, count, total, average, count_wrong, count_exc, results))
 
-
-def run_test(args, tests, parameters, n=500, max_p=50, task=None, do_print=True):
+#
+# Used in legacy tests
+#
+def run_test(args, tests, parameters, n=500, max_p=40, task_func=None, do_print=True):
     if args.cmd == ['clean']:
         parameters['stop'] = 1
         parameters['concurrency'] = 1
@@ -848,6 +880,6 @@ def run_test(args, tests, parameters, n=500, max_p=50, task=None, do_print=True)
                 tc.append(c)
 
         if args.single:
-            run_single_test(args, tc[0], tests, parameters, task=task)
+            run_single_test(args, tc[0], tests, parameters, task_func=task_func)
         else:
-            run_tests(args, tc, tests, parameters, n, max_p, task, do_print)
+            run_tests(args, tc, tests, parameters, n, max_p, task_func, do_print=do_print)
