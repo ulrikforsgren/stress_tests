@@ -4,6 +4,7 @@
 import argparse
 import asyncio
 import copy
+from datetime import datetime, timedelta
 import json
 import os
 import os.path as path
@@ -13,6 +14,7 @@ import re
 import rstr
 import sys
 import time
+import traceback
 from xmlrpc.client import boolean
 
 from .restconf_api import REQ_DISPATCH, setup, teardown, restconf_request
@@ -463,20 +465,60 @@ def number_of_open_connections(conn):
 #    # await asyncio.wait(tasks)
 
 
+##### Default Task
+#
+# parameters (dict) has following keys:
+# - concurrency: number of concurrent requests (int) (optional)
+# - stop: stop after number of requests (int) (optional)
+# - requests-per-second: number of requests per second (int) (optional)
+#
+# task_args (dict) keys:
+# - host: host to connect to (ip:port)
+# - op: operation (create, read, update, delete, action)
+# - resource: resource path
+# - data: request payload (dict/string) (optional)
+# - resource_type: RESTCONF resource type (data, operations) (optional) 
+# - query_parameters: RESTCONF query parameters (dict) (optional)
+#
+async def default_task(args, parameters, client=None,
+                       host='', op='', resource='', data='',
+                       resource_type='data', query_parameters=None):
+
+    resource = format_parameters(parameters, resource)
+    if isinstance(data, dict):
+        data = json.dumps(data)
+    data = format_parameters(parameters, data)
+    parameters.update_request()
+    st = time.monotonic()
+    resp = await restconf_request(args,
+                                  client,
+                                  host,
+                                  op,
+                                  resource,
+                                  data,
+                                  resource_type,
+                                  query_parameters)
+    elapsed = time.monotonic()-st
+    return (*resp, elapsed)
+
+
 #
 # n_p connections are setup for each batch then closed
 #
-async def stress_requests_batch(args, n, n_p, setup, teardown, task, req, parameters):
+async def batch_executor(args, task_args, parameters, setup_func=setup,
+                                teardown_func=teardown, task_func=default_task):
     results = []
+    n = parameters.get('n', 1)
+    n_p = parameters.get('n_p', 1)
     while n > 0:  # Execute requests in batches of n_p in parellel.
         if n < n_p:
             n_p = n
-        await setup(req)
+        await setup_func(task_args)
         st = time.monotonic()
-        tasks = [asyncio.create_task(task(args, parameters, **req))
+        tasks = [asyncio.create_task(task_func(args, parameters, **task_args))
                  for p in range(0, n_p)]
         results += await asyncio.gather(*tasks)
-        await teardown(req)
+        await teardown_func(task_args)
         parameters.update_batch()
         n -= n_p
     elapsed = time.monotonic()-st
@@ -488,17 +530,22 @@ async def stress_requests_batch(args, n, n_p, setup, teardown, task, req, parame
 #
 
 
-async def stress_requests_window(args, n, n_p, setup, teardown, task, task_args, parameters, request_cb=None):
+async def sliding_window_executor(args, task_args, parameters,
+                                setup_func=setup, teardown_func=teardown,
+                                task_func=None, request_cb=None):
+    task_func = task_func or default_task
     results = []
     tasks = set()
-    await setup(task_args)
+    n = parameters.get('stop', 1)
+    n_p = parameters.get('concurrency', 1)
+    await setup_func(task_args)
     conn = task_args['client']._connector
     if not args.dry_run:
         await conn.setup_pool_connections(conn, task_args['host'], n_p)
 
     st = time.monotonic()
     for _ in range(0, min(n, n_p)):
-        tasks.add(asyncio.create_task(task(args, parameters, **task_args)))
+        tasks.add(asyncio.create_task(task_func(args, parameters, **task_args)))
     n -= min(n, n_p)  # Started initial tasks
 
     while len(tasks) > 0:
@@ -512,20 +559,104 @@ async def stress_requests_window(args, n, n_p, setup, teardown, task, task_args,
         a = n_p-len(pending)  # Calculate number of free task slots
         tasks_to_start = min(a, n)
         for _ in range(0, tasks_to_start):  # Start tasks in available slots
-            pending.add(asyncio.create_task(task(args, parameters, **task_args)))
+            pending.add(asyncio.create_task(task_func(args, parameters, **task_args)))
         n -= tasks_to_start
         tasks = pending
     elapsed = time.monotonic()-st
-    await teardown(task_args)
+    await teardown_func(task_args)
     return elapsed, results
 
 
-async def single_request(args, task_args, parameters, setup=setup, teardown=teardown):
+async def sliding_window_executor2(args, task_args, parameters,
+                              global_parameters, last,  
+                              setup_func=setup, teardown_func=teardown,
+                              task_func=default_task, result_queue=None):
+    await setup_func(task_args)
+    try:
+        tasks = set()
+
+        parameters['requests-count'] = 0
+        parameters['task-wait-dept'] = 0
+        parameters['ok'] = 0
+        parameters['nok'] = 0
+        parameters['exc'] = 0
+        req_count = 0
+
+
+        # Start initial concurrency number of tasks
+        stop = parameters.get('stop', 0)
+        rps = parameters.get('requests-per-second', 0)
+        concurrency = parameters.get('concurrency', 1)
+        for _ in range(0, concurrency):
+            tasks.add(asyncio.create_task(task_func(args, parameters, **task_args)))
+            if rps > 0:
+                await asyncio.sleep(1/(rps/concurrency))
+            req_count += 1
+            if stop > 0 and req_count >= stop:
+                break
+
+        while not global_parameters['close_flag'] and len(tasks) > 0:
+            done, tasks = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+            stop = parameters.get('stop', 0)
+            rps = parameters.get('requests-per-second', 0)
+            add_to_metrics = parameters.get('add_to_metrics', False)
+            concurrency = parameters.get('concurrency', 1)
+            new_task_delays = []
+            for d in done:
+                global_parameters['requests-count'] += 1
+                parameters['requests-count'] += 1
+                result = await d
+                rid, rstatus, rcode, rresult, rtime = result
+                last['result'] = last_result = (datetime.now().isoformat(), result)
+                if rstatus == 'ok':
+                    parameters['ok'] += 1
+                    last['success'] = last_result
+                elif rstatus == 'nok':
+                    parameters['nok'] += 1
+                    last['error'] = last_result
+                else:
+                    parameters['exc'] += 1
+                    last_exc = last_result
+                if add_to_metrics and result_queue is not None:
+                    # Push results to metrics_handler
+                    await result_queue.put((time.time(), result))
+
+                d = 1/(rps/concurrency)-rtime if rps>0 else 0
+                if d < 0:
+                    # This means that concurrency may need to be increased
+                    parameters['task-wait-dept'] -= d
+                new_task_delays.append(d)
+            # Start tasks in available slots (if any)
+            for _ in range(concurrency-len(tasks)):
+                if stop == 0 or req_count < stop:
+                    d = new_task_delays.pop(0) if new_task_delays else 0
+                    async def new_task():
+                        if d > 0:
+                            await asyncio.sleep(d)
+                        return await task_func(args, parameters, **task_args)
+                    tasks.add(asyncio.create_task(new_task()))
+                    req_count += 1
+
+    except asyncio.CancelledError:
+        # TODO: More graceful shutdown and collect results?
+        pass
+    except Exception as e:
+        print("EXCEPTION", e)
+        # Print traceback
+        print(traceback.format_exc())
+    finally:
+        for t in tasks:
+            t.cancel()
+        await teardown_func(task_args)
+        
+
+async def single_request(args, task_args, parameters, setup_func=setup, 
+                         teardown_func=teardown, task=default_task):
     # Setup connection pool
-    await setup(task_args)
-    result = await default_task(args, parameters, **task_args)
+    await setup_func(task_args)
+    result = await task(args, parameters, **task_args)
     # Cleanup connection pool
-    await teardown(args)
+    await teardown_func(args)
     return result
 
 
@@ -553,26 +684,6 @@ def format_parameters(parameters, string):
         return str(p)
     return re_sub.sub(lambda m: update_str(parameters, m.group(1)), string)
 
-async def default_task(args, parameters, client=None, host='', op='',
-                       resource='', data='', resource_type='data', query_parameters=None):
-
-    resource = format_parameters(parameters, resource)
-    if isinstance(data, dict):
-        data = json.dumps(data)
-    data = format_parameters(parameters, data)
-    parameters.update_request()
-    st = time.monotonic()
-    resp = await restconf_request(args,
-                                  client,
-                                  host,
-                                  op,
-                                  resource,
-                                  data,
-                                  resource_type,
-                                  query_parameters)
-    elapsed = time.monotonic()-st
-    return (*resp, elapsed)
-
 
 # Calculate the average execution time for all "ok" requests and
 # count number of result types "ok"/"nok"/"exception".
@@ -595,22 +706,22 @@ def calc_average(results):
     return count_ok, total_ok, count_wrong, count_exc
 
 
-def set_flags(args, req):
+def set_flags(args, d):
     flags = {}
     if args.no_networking:
         flags['no-networking'] = 'true'
     if args.commit_queue:
         flags['commit-queue'] = 'sync'
-    if 'query_parameters' in req:
-        req['query_parameters'].update(flags)
-    req['query_parameters'] = flags
+    if 'query_parameters' in d:
+        d['query_parameters'].update(flags)
+    else:
+        d['query_parameters'] = flags
 
 
-def do_test(args, n, n_p, req, parameters, task=None, request_cb=None):
-    task = task or default_task
-    set_flags(args, req)
+def do_test(args, task_args, parameters, task_func=None, request_cb=None):
+    set_flags(args, task_args)
     elapsed, results = asyncio.run(
-        stress_requests_window(args, n, n_p, setup, teardown, task, req, parameters, request_cb=request_cb))
+        sliding_window_executor(args, task_args, parameters, task_func=task_func, request_cb=request_cb))
     if args.v:
         pprint(results)
 
@@ -620,19 +731,20 @@ def do_test(args, n, n_p, req, parameters, task=None, request_cb=None):
 
 
 #
-# Run test in subprocess to ensure proper cleanup between test iterations.
+# Run test in subprocess to ensure proper isolation/cleanup between test iterations.
 #
-def run_test_in_subprocess(args, func, n, n_p, req, parameters, task=None, do_print=False):
-    req = copy.deepcopy(req)
+def run_test_in_subprocess(args, test_func, task_args, parameters, task_func=None, do_print=False):
+    task_args = copy.deepcopy(task_args)
     parameters = copy.deepcopy(parameters)
-    result = func(args, n, n_p, req, parameters, task)
+    result = test_func(args, task_args, parameters, task_func)
     elapsed, count, total, count_wrong, count_exc, results = result
     if count:
         average = total/count
     else:
         average = -1.0
     if do_print:
-        op = req['op'].upper()
+        op = task_args['op'].upper()
+        n_p = parameters['concurrency']
         print(f'{op:<6} {count:>5} {n_p:>3} {elapsed:>5.1f} {count/elapsed:>6.1f} {average:>6.3f} {count_wrong:>5} {count_exc:>5}', flush=True)
     return elapsed, count, total, average, count_wrong, count_exc, results
 
@@ -652,20 +764,21 @@ def np_gen(max_p):
         m *= 10
 
 
-def run_tests(args, which, tests, parameters, n, max_p, task=None, do_print=False):
-    n = args.n or n
+def run_tests(args, which, tests, parameters, no_requests, max_concurrency, task_func=None, do_print=False):
+    no_requests = args.n or no_requests
 
-    max_p = min(max_p, n)
+    max_concurrency = min(max_concurrency, no_requests)
     if args.w:
-        max_p = min(args.w, n)
+        max_concurrency = min(args.w, no_requests)
 
     if not args.s:
-        n_ps = [n for n in np_gen(max_p)]
+        n_ps = [n for n in np_gen(max_concurrency)]
     else:
         n_ps = list(map(int, args.s.split(',')))
 
     print()
     parameters.update_cmdline(args.p)
+    parameters['stop'] = args.n
     if '__info' in tests:
         info = tests['__info']
         if 'name' in info:
@@ -683,10 +796,12 @@ def run_tests(args, which, tests, parameters, n, max_p, task=None, do_print=Fals
         if args.highlight and r % 2 == 1:
             print(ansi.DIM, end='')
         for op in which:
-            req = tests[op]
-            req['host'] = args.host
-            results.append((op, n, n_p, run_test_in_subprocess(
-                args, do_test, n, n_p, req, parameters, task, do_print)))
+            task_args = tests[op]
+            # TODO: Should host be in task_args? parameters is better?
+            task_args['host'] = args.host
+            parameters['concurrency'] = n_p
+            results.append((op, no_requests, n_p, run_test_in_subprocess(
+                args, do_test, task_args, parameters, task_func, do_print)))
         if args.highlight and r % 2 == 1:
             print(ansi.RST, end='')
     if args.o:
@@ -705,22 +820,22 @@ def run_tests(args, which, tests, parameters, n, max_p, task=None, do_print=Fals
     return results
 
 
-def run_crud_tests(args, tests, parameters, n, max_p, task=None, do_print=False):
-    return run_tests(['create', 'read', 'update', 'delete'], args, tests, n, max_p, task, do_print)
+def run_crud_tests(args, tests, parameters, no_requests, max_concurrency, task_func=None, do_print=False):
+    return run_tests(args, ['create', 'read', 'update', 'delete'], tests, no_requests, max_concurrency, task_func, do_print)
 
 
 def run_single_test(args, tc, tests, parameters, task=None):
     n = args.n or 1
     n_p = args.w or 1
-    req = tests[tc]
-    req['host'] = args.host
+    task_args = tests[tc]
+    task_args['host'] = args.host
     if args.keep_state:
         parameters.load_state()
     parameters.update_cmdline(args.p)
     if args.echo:
         print(str(parameters))
     elapsed, count, total, count_wrong, count_exc, results = do_test(
-        args, n, n_p, req, parameters, task)
+        args, task_args, parameters, task)
     if count:
         average = total/count
     else:
@@ -742,7 +857,9 @@ def run_single_test(args, tc, tests, parameters, task=None):
 
 
 def run_test(args, tests, parameters, n=500, max_p=50, task=None, do_print=True):
-    if args.cmd == 'clean':
+    if args.cmd == ['clean']:
+        parameters['stop'] = 1
+        parameters['concurrency'] = 1
         run_single_test(args, 'clean', tests, parameters)
     else:
         tc = []

@@ -143,6 +143,9 @@ ha-status: check-ha
 ha-status-single:
 	echo "show ncs-state ha" | NCS_IPC_PORT=4569 ncs_cli -u admin -C
 
+ui_pb2.py ui_pb2_grpc.py: ui.proto
+	python -m grpc_tools.protoc -I=. --python_out=. --grpc_python_out=. ui.proto
+
 .PHONY: build-pkgs
 build-pkgs: pkg-repo/BUILT
 pkg-repo/BUILT:

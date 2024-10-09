@@ -1,0 +1,26 @@
+{
+  "data": {
+    "python-service:python-service": {
+      "service": [
+        {
+          "name": "S0",
+          "delay": 0,
+          "device": "r0",
+          "str-value": "HVgawwJtaEEtHWh",
+          "start-vlan": 1,
+          "num-vlan": 800,
+          "template": ["vlans"]
+        },
+        {
+          "name": "S1",
+          "delay": 0,
+          "device": "r1",
+          "str-value": "XtJZkbLBzYMZclp",
+          "start-vlan": 1,
+          "num-vlan": 800,
+          "template": ["vlans"]
+        }
+      ]
+    }
+  }
+}

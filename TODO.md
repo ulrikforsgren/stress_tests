@@ -2,8 +2,14 @@
 
 ## TODO
 
+### Working on
+- Unify executors
+
 ### High Priority
+
 - Fix how __repr__, __str__ and current are used in class Parameter etc.
+  - Print last value for all Parameters.
+
 - Fix how values are update between requests e.g random values.
   - Refactor Parameters to support predictable sequences with multiple sequences incl. pseudo 
     random sequences.
@@ -14,8 +20,8 @@
     - Works with both asyncio and plain Python.
 
 ### Medium Priority
+- Handle ctrl-c
 - Catch exception(s) and KeyBoardInterrupt
-- Unify executors
 - Split stress_testing.py:
   - Executors
   - ArgParsers
@@ -25,8 +31,6 @@
 - Support RequestBatch even for sliding_window_executor
 - Choose batch or sliding window
 - Log results to file (csv).
-- Improve dry-run echo
-  - Show URL, URL + intent, intent
 - Write annotations to Grafana
 
 ### Low Priority
@@ -46,10 +50,9 @@
 - Show last/current value of Parameters for "show" command.
 - Write ongoing op before stress requests (progress bar?)
 - Color stress tests output.
-- Color parameters output for readability.
 - Improve coloring of output.
+  - Color parameters output for readability.
 - Better formatting of title in HTML.
-- Print last value for all Parameters.
 - Export metrics from benchmarking-nso.
 - Auto scale concurrency to maintain requests-per-second.
 - Make grpc port (50052) configurable.
@@ -59,17 +62,20 @@
 ## Completed
 
 - Update parameters comments for all tests. ✅
-- Handle change in concurrency. ✅
-
+- Handle change in concurrency. 
+- Unify execution function headers. ✅
+- Improve dry-run echo. ✅
+  - Show URL, URL + intent, intent. ✅
+- Unified terminology: intent/task_args, parameters, ... ✅
 
 
 ## Notes:
 
 Executors:
-- stress_requests_batch (unused)
-- stress_requests_window
+- batch_executor (unused)
+- sliding_window_executor
 - single_request
-- sliding_window_executor (benchmarking-nso)
+- sliding_window_executor2 (benchmarking-nso)
 - throttling_executor (benchmarking-nso)
 
 Tasks:
@@ -80,7 +86,7 @@ Runners:
   - run_tests
     - run_test_in_subprocess
       - do_test
-         (stress_requests_window)
+         - executor
   - run_single_test
 - run_crud_tests (not used)
 - benchmarking-nso

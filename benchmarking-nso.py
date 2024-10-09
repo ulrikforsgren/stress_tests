@@ -11,6 +11,7 @@ import json
 import os
 import pprint as pp
 import re
+import sys
 import time
 import traceback
 
@@ -19,8 +20,11 @@ from prompt_toolkit.shortcuts import PromptSession, CompleteStyle
 from prompt_toolkit.history import FileHistory
 from prompt_toolkit.completion import Completer, Completion, NestedCompleter
 
-from stress_testing.stress_testing import setup, teardown, default_task, Parameters, \
-    Sequence, SequenceRequest, RandomValue, single_request
+from stress_testing.stress_testing import (
+    sliding_window_executor2,
+    Parameters,
+    Sequence
+)
 
 import grpc
 import ui_pb2
@@ -33,6 +37,10 @@ def parseArgs():
                         help='Host:Port to connect to.')
     parser.add_argument('--history', type=int, default=3600,
                          help='How many seconds to keep history data.')
+    parser.add_argument("--dry-run", required=False, action='store_true', default=False,
+                        help="Run sequence but do not send request over network.")
+    parser.add_argument("--echo", required=False, action='store_true', default=False,
+                        help="Echo request to console.")
     return parser.parse_args()
 
 
@@ -59,168 +67,6 @@ def str_to_dict(l):
 
 
 #############################################################################
-#  SLIDING WINDOW JOB EXECUTOR
-#############################################################################
-last_result = None
-last_error = None
-last_success = None
-last_exc = None
-
-
-async def sliding_window_executor(result_queue, task_function, task_args):
-    global close_flag, last_result, last_error, last_success, last_exc
-    await setup(task_args)
-    try:
-        tasks = set()
-
-        parameters = task_args['parameters']
-        parameters['requests-count'] = 0
-        parameters['ok'] = 0
-        parameters['nok'] = 0
-        parameters['exc'] = 0
-        stop = parameters.get('stop', 0)
-        req_count = 0
-        more_requests = True
-
-        # Start initial concurrency number of tasks
-        for _ in range(0, parameters['concurrency']):
-            tasks.add(asyncio.create_task(task_function(**task_args)))
-            req_count += 1
-            if stop > 0 and req_count >= stop:
-                more_requests = False
-                break
-
-        while not close_flag and len(tasks) > 0:
-            done, tasks = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
-            for d in done:
-                global_parameters['requests-count'] += 1
-                parameters['requests-count'] += 1
-                result = await d
-                last_result = (datetime.now().isoformat(), result)
-                if result[1] == 'ok':
-                    parameters['ok'] += 1
-                    last_success = last_result
-                elif result[1] == 'nok':
-                    parameters['nok'] += 1
-                    last_error = last_result
-                else:
-                    parameters['exc'] += 1
-                    last_exc = last_result
-                if parameters['add_to_metrics'] and result_queue is not None:
-                    # Push results to metrics_handler
-                    await result_queue.put((time.time(), result))
-            # Start new tasks to keep a total of concurrency number of tasks running.
-            # Calculate number of free task slots
-            if more_requests:
-                tasks_to_start = task_args['parameters']['concurrency']-len(tasks)
-                if tasks_to_start > 0:
-                    # Start tasks in available slots
-                    for _ in range(0, tasks_to_start):
-                        tasks.add(asyncio.create_task(task_function(**task_args)))
-                        req_count += 1
-                        if stop > 0 and req_count >= stop:
-                            more_requests = False
-                            break
-    except asyncio.CancelledError:
-        # TODO: More graceful shutdown and collect results?
-        pass
-    except Exception as e:
-        print("EXCEPTION", e)
-    finally:
-        for t in tasks:
-            t.cancel()
-        await teardown(task_args)
-
-
-#############################################################################
-#  THROTTLING JOB EXECUTOR
-#############################################################################
-
-# TODO:
-#  - Separate dict for metrics.
-#  - Handle metrics in functions.   
-async def throttling_executor(result_queue, task_function, task_args):
-    global close_flag, last_result, last_error, last_success, last_exc
-    await setup(task_args)
-    try:
-        tasks = set()
-
-        parameters = task_args['parameters']
-        parameters['requests-count'] = 0
-        parameters['task-wait-dept'] = 0
-        parameters['ok'] = 0
-        parameters['nok'] = 0
-        parameters['exc'] = 0
-        req_count = 0
-
-
-        # Start initial concurrency number of tasks
-        stop = parameters.get('stop', 0)
-        rps = parameters.get('requests-per-second', 0)
-        concurrency = parameters.get('concurrency', 1)
-        for _ in range(0, concurrency):
-            tasks.add(asyncio.create_task(task_function(**task_args)))
-            await asyncio.sleep(1/(rps/concurrency))
-            req_count += 1
-            if stop > 0 and req_count >= stop:
-                break
-
-        while not close_flag and len(tasks) > 0:
-            done, tasks = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
-            stop = parameters.get('stop', 0)
-            rps = parameters.get('requests-per-second', 0)
-            add_to_metrics = parameters.get('add_to_metrics', False)
-            concurrency = parameters.get('concurrency', 1)
-            new_task_delays = []
-            for d in done:
-                global_parameters['requests-count'] += 1
-                parameters['requests-count'] += 1
-                result = await d
-                rid, rstatus, rcode, rresult, rtime = result
-                last_result = (datetime.now().isoformat(), result)
-                if rstatus == 'ok':
-                    parameters['ok'] += 1
-                    last_success = last_result
-                elif rstatus == 'nok':
-                    parameters['nok'] += 1
-                    last_error = last_result
-                else:
-                    parameters['exc'] += 1
-                    last_exc = last_result
-                if add_to_metrics and result_queue is not None:
-                    # Push results to metrics_handler
-                    await result_queue.put((time.time(), result))
-
-                d = 1/(rps/concurrency)-rtime if rps>0 else 0
-                if d < 0:
-                    # This means that concurrency may need to be increased
-                    parameters['task-wait-dept'] -= d
-                new_task_delays.append(d)
-            # Start tasks in available slots (if any)
-            for _ in range(concurrency-len(tasks)):
-                if stop == 0 or req_count < stop:
-                    d = new_task_delays.pop(0) if new_task_delays else 0
-                    async def new_task():
-                        if d > 0:
-                            await asyncio.sleep(d)
-                        return await task_function(**task_args)
-                    tasks.add(asyncio.create_task(new_task()))
-                    req_count += 1
-
-    except asyncio.CancelledError:
-        # TODO: More graceful shutdown and collect results?
-        pass
-    except Exception as e:
-        print("EXCEPTION", e)
-        # Print traceback
-        print(traceback.format_exc())
-    finally:
-        for t in tasks:
-            t.cancel()
-        await teardown(task_args)
-
-
-#############################################################################
 #  JOBS
 #############################################################################
 
@@ -228,12 +74,21 @@ async def throttling_executor(result_queue, task_function, task_args):
 # NOTE: Non-primitive datatypes will be shared between the running jobs as
 #       they are passed by reference.
 global_parameters = {
+    'close_flag': 0, # Need to handle this outside the parameters in some way
     'host': 'localhost:8080',
     'concurrency': 1,
+    'requests-per-second': 0, # 0 means no limit
     'delay': 0,
     'requests-count': 0,
     'add_to_metrics': True,
     'stop': 0  # Run job until stopped
+}
+
+last = {
+    'result': None,
+    'error': None,
+    'success': None,
+    'exc': None
 }
 
 
@@ -247,29 +102,27 @@ def get_jobs():
             spec = importlib.util.spec_from_file_location(f'jobs.{module_name}', f'{jobs_directory_path}/{filename}')
             module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(module)
-            if hasattr(module, 'DATA'):
-                jobs[module_name] = module.DATA
+            if hasattr(module, 'intent'):
+                jobs[module_name] = (module.intent, module.parameters)
             elif hasattr(module, 'job'):
                 jobs[module_name] = module.job
+            else:
+                print(f"ERROR: Module {module_name} does not contain 'intent' or 'job' function")
+                sys.exit(1)
 
     return jobs
 
-
-async def job(args, ctx, rq, data, extra_params={}):
+    
+async def job(args, parameters, job_data, cmd_params=None, result_queue=None):
+    global global_parameters, last
     try:
-        print(rq)
-        print(data)
-        print(extra_params)
-        # TODO: Clean up context parameters mixup
-        task_args = data.copy()
-        task_args['host'] = ctx['host'] if 'host' not in task_args else task_args['host'] # Sometimes we set host as args.host. Why?
-        ctx.update(data['parameters'])
-        ctx.set(extra_params)
-        task_args['parameters'] = ctx
-        task_args['ctx'] = ctx
-        task_args['data'] = json.dumps(data['data'])
-#        await sliding_window_executor(rq, default_task, d)
-        await throttling_executor(rq, default_task, task_args)
+        cmd_params = cmd_params or {}
+        intent, job_parameters = job_data
+        task_args = intent.copy()
+        task_args['host'] = global_parameters['host'] if 'host' not in task_args else task_args['host'] # Sometimes we set host as args.host. Why?
+        parameters.update(job_parameters)
+        parameters.set(cmd_params)
+        await sliding_window_executor2(args, task_args, parameters, global_parameters, last, result_queue=result_queue)
     except Exception as e:
         print(f"Error in job: {e}")
         print(traceback.format_exc())
@@ -399,15 +252,15 @@ completer = NestedCompleter.from_nested_dict({
 })
 
 
-async def command_handler(args, rq, cq):
-    global close_flag, global_parameters
+async def command_handler(args, result_queue, cq):
+    global global_parameters, last
     req_task = None
     cmd_history = FileHistory(".benchmarching_nso_history")
     with patch_stdout():
         session = PromptSession("benchmarking-nso> ", history=cmd_history)
         try:
             try:
-                while not close_flag:
+                while not global_parameters['close_flag']:
                     cmdline = await session.prompt_async(
                         completer=completer)  # ,
                     # complete_style=CompleteStyle.READLINE_LIKE)
@@ -431,21 +284,21 @@ async def command_handler(args, rq, cq):
                                 print('Job is already running.')
                             else:
                                 job_data = jobs[cmdargs[0]]
-                                ctx = Parameters(dict_copy_except(
+                                global_parameters = Parameters(dict_copy_except(
                                     global_parameters, ['requests-count']))
-                                extra_params = str_to_dict(cmdargs[1:])
+                                cmd_params = str_to_dict(cmdargs[1:])
                                 if not callable(job_data):
                                     global job
                                     running_jobs[cmdargs[0]] = {
                                         'task': asyncio.create_task(
-                                            job_executor(cmdargs[0], job(args, ctx, rq, job_data, extra_params=extra_params))),
-                                        'ctx': ctx
+                                            job_executor(cmdargs[0], job(args, global_parameters, job_data, cmd_params=cmd_params, result_queue=result_queue))),
+                                        'ctx': global_parameters
                                     }
                                 else:
                                     running_jobs[cmdargs[0]] = {
                                         'task': asyncio.create_task(
-                                            job_executor(cmdargs[0], job_data(args, ctx, rq, None, extra_params=extra_params))),
-                                        'ctx': ctx
+                                            job_executor(cmdargs[0], job_data(args, global_parameters, None, cmd_params=cmd_params, result_queue=result_queue))),
+                                        'ctx': global_parameters
                                     }
                                 # cq.put({'cmd': 'start'})
                                 # cq.join()
@@ -495,28 +348,28 @@ async def command_handler(args, rq, cq):
                         elif cmd == 'set':
                             idx = 0
                             if cmdargs[0] == 'global':
-                                ctx = global_parameters
+                                global_parameters = global_parameters
                                 idx = 1
                             elif cmdargs[0] == 'job':
                                 if cmdargs[1] in jobs:
-                                    ctx = running_jobs[cmdargs[1]]['ctx']
+                                    global_parameters = running_jobs[cmdargs[1]]['ctx']
                                     idx = 2
                                     #cq.put({'cmd': 'set'})
                                     #cq.join()
                                 else:
                                     print('Invalid job name.')
                             if idx:
-                                if cmdargs[idx] in ctx:
-                                    v = ctx[cmdargs[idx]]
+                                if cmdargs[idx] in global_parameters:
+                                    v = global_parameters[cmdargs[idx]]
                                     if type(v) is int:
-                                        ctx[cmdargs[idx]] = int(cmdargs[idx+1])
+                                        global_parameters[cmdargs[idx]] = int(cmdargs[idx+1])
                                     elif type(v) is str:
-                                        ctx[cmdargs[idx]] = cmdargs[idx+1]
+                                        global_parameters[cmdargs[idx]] = cmdargs[idx+1]
                                     elif type(v) is float:
-                                        ctx[cmdargs[idx]] = float(
+                                        global_parameters[cmdargs[idx]] = float(
                                             cmdargs[idx+1])
                                     elif isinstance(v, Sequence):
-                                        ctx[cmdargs[idx]].set(
+                                        global_parameters[cmdargs[idx]].set(
                                             int(cmdargs[idx]))
                                 else:
                                     print('Invalid parameter name.')
@@ -525,10 +378,10 @@ async def command_handler(args, rq, cq):
                             #cq.put(c)
                             #cq.join()
                         elif cmd == 'last':
-                            print('result:', last_result)
-                            print('error:', last_error)
-                            print('success:', last_success)
-                            print('exception:', last_exc)
+                            print('result:', last['result'])
+                            print('error:', last['error'])
+                            print('success:', last['success'])
+                            print('exception:', last['exc'])
                         else:
                             print("Unknown command.")
                     except Exception as e:
@@ -544,7 +397,7 @@ async def command_handler(args, rq, cq):
             pass
         except asyncio.CancelledError:
             pass
-        close_flag = 1
+        global_parameters['close_flag'] = 1
         for name, job in running_jobs.items():
             job['task'].cancel()
         if req_task is not None:
@@ -570,13 +423,13 @@ async def summarize_results(results):
     return ok, nok
 
 async def metrics_handler(args, rq):
-    global close_flag, metrics_history
+    global global_parameters, metrics_history
 
     # Current strategy is all items from the queue once per second and assume
     # the this task is able to do that. If not, we need to change the strategy.
 
     t_prev = time.time()
-    while close_flag == 0:
+    while global_parameters['close_flag'] == 0:
         # Update every second
         nt = time.time()
         await asyncio.sleep(1)
@@ -657,8 +510,6 @@ notifications = ProdCons()
 #############################################################################
 #  MAIN
 #############################################################################
-
-close_flag = 0
 
 async def amain(args, rq, cq):
     global request_task
