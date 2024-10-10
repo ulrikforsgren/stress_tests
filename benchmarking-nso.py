@@ -21,7 +21,7 @@ from stress_testing.stress_testing import (
     parseArgs,
     sliding_window_executor,
     Parameters,
-    Sequence
+    Parameter
 )
 
 import grpc
@@ -312,8 +312,8 @@ async def command_handler(args, result_queue, cq):
                             elif cmdargs[0] == 'job':
                                 if cmdargs[1] in jobs:
                                     for k, v in running_jobs[cmdargs[1]]['ctx'].items():
-                                        if isinstance(v, Sequence):
-                                            print(f'{k:<20}: {v.current()}')
+                                        if isinstance(v, Parameter):
+                                            print(f'{k:<20}: {repr(v)}')
                                         else:
                                             print(f'{k:<20}: {v}')
                                 else:
@@ -321,8 +321,8 @@ async def command_handler(args, result_queue, cq):
                             elif cmdargs[0] == 'completed':
                                 if cmdargs[1] in completed_jobs:
                                     for k, v in completed_jobs[cmdargs[1]].items():
-                                        if isinstance(v, Sequence):
-                                            print(f'{k:<20}: {v.current()}')
+                                        if isinstance(v, Parameter):
+                                            print(f'{k:<20}: {repr(v)}')
                                         else:
                                             print(f'{k:<20}: {v}')
                                 else:
@@ -352,7 +352,7 @@ async def command_handler(args, result_queue, cq):
                                     elif type(v) is float:
                                         global_parameters[cmdargs[idx]] = float(
                                             cmdargs[idx+1])
-                                    elif isinstance(v, Sequence):
+                                    elif isinstance(v, Parameter):
                                         global_parameters[cmdargs[idx]].set(
                                             int(cmdargs[idx]))
                                 else:

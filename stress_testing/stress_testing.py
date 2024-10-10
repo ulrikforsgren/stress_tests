@@ -154,20 +154,6 @@ async def setup_task(args, client, host):
     return (*resp, elapsed)
 
 
-def format_parameters(parameters, string, update=True):
-    re_sub = re.compile(r'<<(\w+)>>')
-    def update_str(parameters, key):
-        p = parameters[key]
-        if isinstance(p, Parameter):
-            if update:
-                return p.update_str() # Calls Parameter.update_str
-        elif isinstance(p, Calc):
-            if update:
-                return p.val(parameters) # Calls Calc.val
-        return str(p)
-    return re_sub.sub(lambda m: update_str(parameters, m.group(1)), string)
-
-
 # Calculate the average execution time for all "ok" requests and
 # count number of result types "ok"/"nok"/"exception".
 def calc_average(results):
@@ -264,40 +250,91 @@ def number_of_open_connections(conn):
 # })
 #
 
+def format_parameters(parameters, string, update=True):
+    re_sub = re.compile(r'<<(\w+)>>')
+    def update_str(parameters, key):
+        p = parameters[key]
+        if update:
+            if isinstance(p, Parameter):
+                p.update_str()
+        return str(p)
+    return re_sub.sub(lambda m: update_str(parameters, m.group(1)), string)
+
+
 class Parameter:
     def __init__(self, keep_state=False):
         self.keep_state = keep_state
+        self.current = '<no value>'
 
+    def __deepcopy__(self, memo):
+        new = self.__class__(self.keep_state)
+        new.current = s.current
+        return new
+
+    # Save the current state.
     def getstate(self):
-        raise NotImplementedError()
+        raise NotImplementedError
 
+    # Restore to a stored state.
     def setstate(self, state):
-        raise NotImplementedError()
+        raise NotImplementedError
 
+    # Implemented by LookupValue
+    # TODO: Usage unknown
+    def get(self, parameters, key):
+        raise NotImplementedError
+    
+    # Set/update from e.g. benchmarking-nso cli.
     def set(self, *args):
-        pass
+        raise NotImplementedError
 
+    # Update when a new value is requested
+    # and return the new value.
     def update_str(self):
         pass
 
+    # Update the value after each request.
     def update_request(self):
         pass
 
+    # Update after a batch of requests.
     def update_batch(self):
         pass
 
+    # Restore to initial state.
     def reset(self):
         pass
 
+    # Return the current value.
     def current(self):
         return None
     
+    # Return the calculated value.
+    # Implemented by Calc
+    # TODO: Should this be merged with update_str?
+    def val(self, parameters):
+        raise NotImplementedError()
+    
+    # Return current value as a string.
+    def __str__(self):
+        return str(self.current)
+
+    # Return the representative value of the parameter. 
+    def __repr__(self):
+        return 'Parameter{}'
+
 
 class Sequence(Parameter):
     def __init__(self, n, wrap=None, keep_state=False):
         super().__init__(keep_state)
         self.n = n
         self.wrap = wrap
+
+    def __repr__(self):
+        return f'{self.__class__.__name__}(start={self.n}, wrap={self.wrap}, current={self.current})'
+
+    def __deepcopy__(self, memo):
+        return self.__class__(self.n)
 
     def getstate(self):
         return self.n
@@ -310,31 +347,16 @@ class Sequence(Parameter):
             n = int(n)
         self.n = n
 
-    def __str__(self):
-        s = str(self.n)
-        return s
-
     def update_str(self):
-        s = str(self)
-        self.n += 1
-        if self.wrap is not None:
-            self.n = self.n % self.wrap
-        return s
-
-    def update_request(self):
-        pass
-
-    def update_batch(self):
-        pass
-
-    def __deepcopy__(self, memo):
-        return self.__class__(self.n)
+        if self.current == '<no value>':
+            self.current = self.n
+        else:
+            self.current += 1
+            if self.wrap is not None:
+                self.current = self.current % self.wrap
 
     def reset(self):
         self.n = 0
-
-    def current(self):
-        return f'Sequence(n={self.n})'
 
 
 class SequenceRequest(Sequence):
@@ -342,15 +364,26 @@ class SequenceRequest(Sequence):
         super().__init__(n, wrap, keep_state)
 
     def update_str(self):
-        return str(self)
+        pass
 
     def update_request(self):
-        self.n += 1
-        if self.wrap is not None:
-            self.n = self.n % self.wrap
+        super().update_str()
 
-    def current(self):
-        return f'SequenceRequest(n={self.n}, wrap={self.wrap})'
+
+class SequenceBatch(Sequence):
+    def __init__(self, n, keep_state=False):
+        super().__init__(n, keep_state)
+
+    def update_str(self):
+        pass
+
+    def update_batch(self):
+        if self.current == '<no value>':
+            self.current = self.n
+        else:
+            self.current += 1
+            if self.wrap is not None:
+                self.current = self.current % self.wrap
 
 
 class SequenceRequestRandomized(SequenceRequest):
@@ -361,36 +394,29 @@ class SequenceRequestRandomized(SequenceRequest):
         self.rnd = random.Random(seed)
         self.sequence = list(range(self.length))
         self.rnd.shuffle(self.sequence)
+        raise RuntimeWarning('Implementation must be update to support updating scheme')
 
-    def getstate(self):
-        return (self.n, self.sequence)
-
-    def setstate(self, state):
-        # NOTE: This will restore the sequence as a tuple and will be immutable.
-        # NOTE: The random generator state is not restored.
-        self.n, self.sequence = state
+    def __repr__(self):
+        return f'SequenceRequestRandomized(seed={self.seed} length={self.length}, values left={len(self.sequence)})'
 
     def __str__(self):
         try:
             return str(self.sequence[self.n])
         except IndexError:
             return "No more values ({self.n})"
+
+    def getstate(self):
+        raise RuntimeWarning('Implementation must be update to support updating scheme')
+        return (self.n, self.sequence)
+
+    def setstate(self, state):
+        # NOTE: This will restore the sequence as a tuple and will be immutable.
+        # NOTE: The random generator state is not restored.
+        self.n, self.sequence = state
+        raise RuntimeWarning('Implementation must be update to support updating scheme')
     
     def update_str(self):
         return str(self.sequence[self.n])
-
-    def current(self):
-        return f'SequenceRequestRandomized(n={self.n}, wrap={self.wrap})'
-
-class SequenceBatch(Sequence):
-    def __init__(self, n, keep_state=False):
-        super().__init__(n, keep_state)
-
-    def update_str(self):
-        pass
-
-    def update_batch(self):
-        self.n += 1
 
 
 class RandomParameter(Parameter):
@@ -412,14 +438,15 @@ class RandomValue(RandomParameter):
         self.lower = lower
         self.upper = upper
 
+    def __repr__(self):
+        return f'RandomValue({self.lower}..{self.upper}, {self.current})'
+
     def __deepcopy__(self, memo):
         return self.__class__(self.lower, self.upper, self.seed)
     
-    def __str__(self):
-        return str(random.randint(self.lower, self.upper))
+    def update_str(self):
+        self.current = random.randint(self.lower, self.upper)
 
-    def current(self):
-        return f'RandomValue({self.lower}..{self.upper})'
 
 
 class RandomValueRequest(RandomParameter):
@@ -429,18 +456,16 @@ class RandomValueRequest(RandomParameter):
         self.upper = upper
         self.n = random.randint(self.lower, self.upper)
 
+    def __repr__(self):
+        return f'RandomValueRequest({self.lower}..{self.upper}, {self.current})'
+
     def __deepcopy__(self, memo):
         return self.__class__(self.lower, self.upper, self.seed)
     
-    def __str__(self):
-        return str(self.n)
-
     def update_request(self):
-        self.n = random.randint(self.lower, self.upper)
+        self.current = random.randint(self.lower, self.upper)
 
-    def current(self):
-        return f'RandomValueRequest({self.lower}..{self.upper})'
-
+    
 
 class RandomString(RandomParameter):
     def __init__(self, length, seed=None, keep_state=False):
@@ -448,6 +473,12 @@ class RandomString(RandomParameter):
         self.length = length
         self.rstr = rstr.Rstr(self.rnd)
         self.value = self.rstr.letters(self.length)
+
+    def __repr__(self):
+        return f'{self.__class__}(seed={self.seed}, length={self.length}), current={self.current}'
+
+    def __deepcopy__(self, memo):
+        return self.__class__(self.length, self.seed)
 
     def getstate(self):
         return (super().getstate(), self.value)
@@ -457,24 +488,25 @@ class RandomString(RandomParameter):
         super().setstate(state)
 
     def set(self, n):
-        # NOTE: This is a hack to allow changing the length of the string, but it breaks the pseudo random sequence.
+        # NOTE: This is a hack to allow changing the length of the string,
+        #       but it breaks the pseudo random sequence.
         if isinstance(n, str):
             n = int(n)
         self.length = n
 
     def update_str(self):
-        s = self.value
-        self.value = self.rstr.letters(self.length)
-        return s
+        self.current = self.rstr.letters(self.length)
 
-    def __deepcopy__(self, memo):
-        return self.__class__(self.length, self.seed)
 
-    def __str__(self):
-        return self.value
+class RandomStringRequest(RandomString):
+    def __init__(self, length, seed=None, keep_state=False):
+        super().__init__(length, seed, keep_state)
 
-    def current(self):
-        return f'RandomString(length={self.length})'
+    def update_str(self):
+        pass
+
+    def update_request(self):
+        self.current = self.rstr.letters(self.length)
 
 
 class LookupValue(Parameter):
@@ -505,20 +537,24 @@ class LookupValue(Parameter):
 
 
 
-class Calc:
+class Calc(Parameter):
     def __init__(self, key, wrap, mul, add):
         self.key = key
         self.wrap = wrap
         self.mul = mul
         self.add = add
-    def val(self, parameters):
+
+    def __repr__(self):
+        return f'Calc(key={self.key}, mul{self.mul}, add={self.add}, current={self.current})' 
+    
+    def update_str(self, parameters):
         i = parameters[self.key].n
-        o = i//self.wrap*self.mul+self.add
-        return str(o)
+        self.current = i//self.wrap*self.mul+self.add
     
     
 """
-class Parameters makes it possible provide parameters in the form of <<x>> in
+class Parameters is a dict of values and Parameter objects.
+Makes it possible provide parameters in the form of <<x>> in
 resource and data strings.
 """
 
@@ -542,12 +578,12 @@ class Parameters(dict):
 
     def update_request(self):
         for v in self.values():
-            if isinstance(v, Sequence):
+            if isinstance(v, Parameter):
                 v.update_request()
 
     def update_batch(self):
         for v in self.values():
-            if isinstance(v, Sequence):
+            if isinstance(v, Parameter):
                 v.update_batch()
 
     def update_cmdline(self, cmd_p):
