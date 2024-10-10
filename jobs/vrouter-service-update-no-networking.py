@@ -1,7 +1,13 @@
 from stress_testing.stress_testing import SequenceRequest, RandomValue
 
-DATA = \
-{
+start = 0
+stop = 0
+no_services = 1000
+delay = 0
+no_vlan = 1
+
+
+intent = {
   "op": "update",
   "url": "/vrouter:vrouter/service=K<<id>>",
   "data": {
@@ -13,11 +19,16 @@ DATA = \
       "str-value": "<<data>>"
     }
   },
-  "parameters": {
-    "id": SequenceRequest(0, wrap=1000),
-    "data": RandomValue(0, 4000000000),
-    "delay": 0,
-    "numvlan": 1
-  },
-  "params": {"no-networking": "true"}
+  "query_parameters": {
+    "no-networking": "true"
+  }
 }
+
+parameters = {
+    "id": SequenceRequest(start, wrap=no_services),
+    "data": RandomValue(0, 4000000000),
+    "delay": delay,
+    "numvlan": no_vlan,
+    "stop": stop
+}
+ 

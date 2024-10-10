@@ -2,9 +2,8 @@ from stress_testing.stress_testing import SequenceRequest, RandomValue
 
 start = 0
 stop = 0 # 0 means continue forever
-no_devices = 1000
 no_services = 100
-num_vlan = 20
+delay = 0
 
 
 intent = {
@@ -26,7 +25,7 @@ intent = {
 parameters = {
     "sid": SequenceRequest(start, wrap=no_services),
     "data": RandomValue(0, 4000000000),
-    "delay": 1000,
+    "delay": delay,
     "stop": stop, # 0 means continue forever
 }
 

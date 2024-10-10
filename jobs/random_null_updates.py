@@ -1,6 +1,14 @@
-from stress_testing.stress_testing import SequenceRequest, RandomValue, \
-                                          RandomString, ContextValue
+from stress_testing.stress_testing import (
+    RandomValue,
+    RandomString,
+    LookupValue
+)
+
 import json
+
+stop = 0
+no_vlan = 1
+
 
 def read_services():
     services = {}
@@ -15,8 +23,7 @@ def read_services():
 SERVICES = read_services()
 
 
-DATA = \
-{
+intent = {
   "op": "update",
   "url": "/python-service:python-service/service=S<<id>>",
   "data": {
@@ -24,14 +31,17 @@ DATA = \
       "str-value": "<<ctxvalue>>"
     }
   },
-  "parameters": {
+  "query_parameters": {
+      "no-networking": "true"
+  }
+}
+
+parameters = {
     "id": RandomValue(0, 100000),
     "rndstr": RandomString(15),
-    "ctxvalue": ContextValue(SERVICES, 'S<<id>>', 'str-value'),
+    "ctxvalue": LookupValue(SERVICES, 'S<<id>>', 'str-value'),
     "delay": 0,
-    "numvlan": 800,
+    "numvlan": no_vlan,
     "concurrency": 40,
-    "stop": 0,  # Continue forever
-  },
-  "params": {"no-networking": "true"}
+    "stop": stop,  # Continue forever
 }

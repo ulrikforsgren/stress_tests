@@ -1,7 +1,13 @@
 from stress_testing.stress_testing import SequenceRequest, RandomValue
 
-DATA = \
-{
+start = 0
+wrap = 1000
+stop = 0
+delay = 0
+no_vlan = 1
+
+
+intent = {
   "op": "create",
   "url": "/vrouter:vrouter",
   "data": {
@@ -11,13 +17,14 @@ DATA = \
       "template": "vlans",
       "device": "r<<id>>",
       "str-value": "<<data>>",
-      "num-vlan": 1
+      "num-vlan": no_vlan
     }
-  },
-  "parameters": {
-    "id": SequenceRequest(0),
-    "data": RandomValue(0, 4000000000),
-    "delay": 0,
-    "stop": 1000
   }
+}
+
+parameters = {
+    "id": SequenceRequest(start),
+    "data": RandomValue(start, 4000000000),
+    "delay": delay,
+    "stop": stop
 }

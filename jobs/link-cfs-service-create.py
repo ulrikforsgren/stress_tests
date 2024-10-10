@@ -1,12 +1,16 @@
 from stress_testing.stress_testing import SequenceRequest, RandomValue
 
-DATA = \
-{
+start = 0
+stop = 1000
+delay = 0
+
+
+intent = {
   "op": "create",
   "url": "/link-cfs:link-cfs",
   "data": {
     "link-cfs":{
-      "name": "K<<id>>",
+      "name": "S<<id>>",
       "sleep": "<<delay>>",
       "unit": "<<unit>>",
       "vid": "<<vid>>",
@@ -18,13 +22,14 @@ DATA = \
         }
       ]
     }
-  },
-  "parameters": {
-    "id": SequenceRequest(0),
-    "unit": SequenceRequest(0),
-    "vid": SequenceRequest(0),
-    "data": RandomValue(0, 4000000000),
-    "delay": 0,
-    "stop": 1000
   }
+}
+
+parameters= {
+    "id": SequenceRequest(start),
+    "unit": SequenceRequest(start),
+    "vid": SequenceRequest(start),
+    "data": RandomValue(0, 4000000000),
+    "delay": delay,
+    "stop": stop
 }

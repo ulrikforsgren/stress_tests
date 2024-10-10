@@ -1,7 +1,10 @@
 from stress_testing.stress_testing import SequenceRequest, RandomValue
 
-DATA = \
-{
+start = 0
+no_services = 1000
+
+
+intent = {
   "op": "update",
   "url": "/model-a:model-a/model-a:list=K<<id>>",
   "data": {
@@ -9,9 +12,10 @@ DATA = \
         "str-value": "Changed string data <<data>>",
         "int-value": "<<data>>"
     }
-  },
-  "parameters": {
-    "id": SequenceRequest(0, wrap=1000),
-    "data": RandomValue(0, 4000000000)
   }
+}
+
+parameters = {
+    "id": SequenceRequest(start, wrap=no_services),
+    "data": RandomValue(0, 4000000000)
 }
