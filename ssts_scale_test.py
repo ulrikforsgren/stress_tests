@@ -353,11 +353,13 @@ def clean(args):
 
 
 def main(args):
-    if args.cmd[0] == 'run':
-        run(args)
-    elif args.cmd[0] == 'clean':
-        clean(args)
-    else:
-        print('Unknown command:', args.cmd[0])
+    for cmd in args.cmd:
+        if cmd == 'run':
+            run(args)
+        elif cmd == 'clean':
+            clean(args)
+        else:
+            print(f'Unknown command {cmd}')
+            
 if __name__ == '__main__':
     main(parseArgs(options='scripted'))

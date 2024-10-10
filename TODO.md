@@ -3,16 +3,16 @@
 ## TODO
 
 ### Working on
-- Use common ParseArgs framework.
-    - ssts_scale_tests
 
 ### High Priority
+
 - Fix how __repr__, __str__ and current are used in class Parameter etc.
   - Print last value for all Parameters.
 
 - Fix how values are update between requests e.g random values.
   - Refactor Parameters to support predictable sequences with multiple sequences incl. pseudo 
     random sequences.
+- Support RequestBatch even for sliding_window_executor
 - Wrap random sequence after n requests.
 - Better back propagation mechanism for results.
   - Handle multiprocessing, threading and asyncio
@@ -21,15 +21,18 @@
 
 
 ### Medium Priority
+
 - Handle ctrl-c
     - Catch exception(s) and KeyBoardInterrupt
+    - Fix close_flag
+
 - Split stress_testing.py:
   - Executors
   - ArgParsers
   - Runners (CRUD, single test, ...)
   - Tasks
   - Etc.
-- Support RequestBatch even for sliding_window_executor
+
 - Log results to file (csv).
 - Write annotations to Grafana
 
@@ -77,6 +80,7 @@
 - Use common ParseArgs framework. ✅
     - tests ✅
     - benchmarking-nso ✅
+    - ssts_scale_tests ✅
 
 
 ## Notes:
@@ -85,8 +89,7 @@ Executors:
 - batch_executor (unused)
 - sliding_window_executor
 - single_request
-- sliding_window_executor2 (benchmarking-nso)
-- throttling_executor (benchmarking-nso)
+
 
 Tasks:
 - default_task
