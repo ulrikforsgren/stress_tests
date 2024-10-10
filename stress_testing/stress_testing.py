@@ -619,13 +619,14 @@ async def sliding_window_executor(args, task_args, parameters,
         # TODO: Must find a better way to handle close_flag
         close_flag = 0
         results = []
+        n = 0
+        new_task_delays = []
         while not close_flag and len(tasks) > 0:
             done, tasks = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
             stop = parameters.get('stop', 0)
             rps = parameters.get('requests-per-second', 0)
             add_to_metrics = parameters.get('add_to_metrics', False)
             concurrency = parameters.get('concurrency', 1)
-            new_task_delays = []
             for d in done:
                 if global_parameters:
                     global_parameters['requests-count'] += 1
@@ -658,7 +659,7 @@ async def sliding_window_executor(args, task_args, parameters,
             # Start tasks in available slots (if any)
             for _ in range(concurrency-len(tasks)):
                 if stop == 0 or req_count < stop:
-                    d = new_task_delays.pop(0) if new_task_delays else 0
+                    d = new_task_delays.pop(0) if new_task_delays else 1/(rps/concurrency)
                     async def new_task():
                         if d > 0:
                             await asyncio.sleep(d)
