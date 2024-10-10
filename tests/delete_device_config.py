@@ -1,5 +1,4 @@
 from stress_testing.stress_testing import (
-    parseArgs,
     Parameters,
     Parameter
 )
@@ -14,7 +13,7 @@ from devices import devices
 class PopRequest(Parameter):
     def __init__(self, l):
         self.l = l
-    
+
     def update_request(self):
         try:
             self.current = self.l.pop(0)
