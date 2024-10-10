@@ -45,8 +45,11 @@ class ansi:
     RED = '\033[91m'
 
 
-# Arguments parser
+###############################################################################
+#  ARGUMENTS PARSER FUNCTIONS
+###############################################################################
 #
+
 def parseArgs(args=None, extra_cmds=[], options='old-crud', path=None):
     commands = []
     if isinstance(options, str):
@@ -62,22 +65,34 @@ def parseArgs(args=None, extra_cmds=[], options='old-crud', path=None):
             'highlight',
         ]
         commands += ['clean', 'create', 'read', 'update', 'delete', 'crud', 'cud']
-    if 'old-crud' in options:
+    elif 'old-crud' in options:
         options += ['single']
-    if 'benchmarking' in options:
+    elif 'benchmarking' in options:
         options += ['basic']
-    if 'scripted' in options:
+    elif 'scripted' in options:
         options += [
             'basic',
             'state'
         ]
         commands += ['clean', 'run']
+    elif 'single' in options:
+        options += [
+            'basic',
+            'scale',
+            'params',
+            'commit-params',
+            'action'
+        ]
+
     parser = argparse.ArgumentParser()
     if commands:
         parser.add_argument('cmd', nargs='+', choices=commands + extra_cmds)
-    if 'crud' in options:
+    if {'crud', 'action'}.intersection(options):
         parser.add_argument('test', type=str,
                             help='Test to run.')
+    if 'action' in options:
+        parser.add_argument('operation', type=str,
+                            help='Operation to run.')
     if 'basic' in options:
         parser.add_argument('--host', type=str,
                             help='host[:port]',
@@ -957,7 +972,7 @@ def run_single_test(args, tc, tests, parameters, task_func=None):
         print("Wrong status:       ", count_wrong)
         print("Exceptions:         ", count_exc)
 
-    return (args.cmd, n, n_p, (elapsed, count, total, average, count_wrong, count_exc, results))
+    return elapsed, count, total, average, count_wrong, count_exc, results
 
 #
 # Used in legacy tests

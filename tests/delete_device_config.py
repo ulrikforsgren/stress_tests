@@ -14,9 +14,12 @@ from devices import devices
 class PopRequest(Parameter):
     def __init__(self, l):
         self.l = l
+    
     def update_request(self):
-        self.current = self.l.pop(0)
-
+        try:
+            self.current = self.l.pop(0)
+        except IndexError:
+            self.current = '<no more values>'
 
 # Paramaters are used to dynamically update the intent (op, resource, data, ...) 
 # for each request. There are multiple types of parameters to create e.g 
