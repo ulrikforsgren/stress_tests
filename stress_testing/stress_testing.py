@@ -454,46 +454,50 @@ class RandomParameter(Parameter):
 
 
 class RandomValue(RandomParameter):
-    def __init__(self, lower, upper, seed=None, keep_state=False):
+    # Wrapping only works when a seed is provided
+    def __init__(self, lower, upper, wrap=None, seed=None, keep_state=False):
         super().__init__(seed, keep_state)
         self.lower = lower
         self.upper = upper
+        self.wrap = wrap
+        self.n = 0
 
     def __repr__(self):
-        return f'RandomValue({self.lower}..{self.upper}, {self.current})'
+        return f'RandomValue({self.lower}..{self.upper}, n={self.n}, {self.current})'
 
     def __deepcopy__(self, memo):
         return self.__class__(self.lower, self.upper, self.seed)
     
     def update_str(self):
-        self.current = random.randint(self.lower, self.upper)
+        self.n += 1
+        if self.wrap is not None and self.n > self.wrap:
+            self.__init__(self.lower, self.upper, self.wrap, self.seed)
+        self.current = self.rnd.randint(self.lower, self.upper)
 
 
 
-class RandomValueRequest(RandomParameter):
-    def __init__(self, lower, upper, seed=None, keep_state=False):
-        super().__init__(seed, keep_state)
-        self.lower = lower
-        self.upper = upper
-        self.n = random.randint(self.lower, self.upper)
+class RandomValueRequest(RandomValue):
+    def __init__(self, lower, upper, wrap=None, seed=None, keep_state=False):
+        super().__init__(lower, upper, wrap, seed, keep_state)
 
     def __repr__(self):
-        return f'RandomValueRequest({self.lower}..{self.upper}, {self.current})'
+        return f'RandomValueRequest({self.lower}..{self.upper}, n={self.n}, {self.current})'
 
-    def __deepcopy__(self, memo):
-        return self.__class__(self.lower, self.upper, self.seed)
-    
+    def update_str(self):
+        pass
+
     def update_request(self):
-        self.current = random.randint(self.lower, self.upper)
-
+        super().update_str()
     
 
 class RandomString(RandomParameter):
-    def __init__(self, length, seed=None, keep_state=False):
+    def __init__(self, length, wrap=None, seed=None, keep_state=False):
         super().__init__(seed, keep_state)
         self.length = length
         self.rstr = rstr.Rstr(self.rnd)
         self.value = self.rstr.letters(self.length)
+        self.wrap = wrap
+        self.n = 0
 
     def __repr__(self):
         return f'{self.__class__}(seed={self.seed}, length={self.length}), current={self.current}'
@@ -516,6 +520,9 @@ class RandomString(RandomParameter):
         self.length = n
 
     def update_str(self):
+        self.n += 1
+        if self.wrap is not None and self.n > self.wrap:
+            self.__init__(self.length, self.wrap, self.seed)
         self.current = self.rstr.letters(self.length)
 
 
@@ -527,7 +534,7 @@ class RandomStringRequest(RandomString):
         pass
 
     def update_request(self):
-        self.current = self.rstr.letters(self.length)
+        super().update_str()
 
 
 class LookupValue(Parameter):
