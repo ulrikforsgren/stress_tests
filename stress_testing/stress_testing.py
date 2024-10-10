@@ -154,14 +154,16 @@ async def setup_task(args, client, host):
     return (*resp, elapsed)
 
 
-def format_parameters(parameters, string):
+def format_parameters(parameters, string, update=True):
     re_sub = re.compile(r'<<(\w+)>>')
     def update_str(parameters, key):
         p = parameters[key]
         if isinstance(p, Parameter):
-            return p.update_str()
-        if isinstance(p, Calc):
-            return p.val(parameters)
+            if update:
+                return p.update_str() # Calls Parameter.update_str
+        elif isinstance(p, Calc):
+            if update:
+                return p.val(parameters) # Calls Calc.val
         return str(p)
     return re_sub.sub(lambda m: update_str(parameters, m.group(1)), string)
 
@@ -835,7 +837,7 @@ def run_tests(args, testcases, tests, parameters, no_requests, max_concurrency, 
     if '__info' in tests:
         info = tests['__info']
         if 'name' in info:
-            name = format_parameters(parameters, info['name'])
+            name = format_parameters(parameters, info['name'], update=False)
             if args.highlight:
                 print(ansi.BOLD, end='')
                 print(ansi.REVERSE, end='')
