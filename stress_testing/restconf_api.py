@@ -81,7 +81,7 @@ async def restconf_request(args, client, host, op, resource, data=None,
                 res = 'ok' if response.status in expected_status else 'nok'
                 return (rid, res, response.status, data)
         except Exception as e:
-            return (rid, 'exception', repr(e))
+            return (rid, 'exception', None, repr(e))
     else:
         return (rid, 'ok', 418, 'dry-run') # I'm a teapot (RFC 2324, means no request is sent)
 
