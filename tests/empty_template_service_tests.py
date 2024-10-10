@@ -1,14 +1,7 @@
-#!/usr/bin/env python3
-# -*- mode: python; python-indent: 4 -*-
-
-import sys
-
 from stress_testing.stress_testing import (
-    parseArgs,
     Parameters,
     SequenceRequest,
-    RandomValue,
-    run_test
+    RandomValue
 )
 
 
@@ -28,7 +21,7 @@ parameters = Parameters({
 })
 
 
-CRUD_TESTS = {
+tests = {
     '__info':
         {
             'name': 'Empty template based service'
@@ -70,6 +63,3 @@ CRUD_TESTS = {
             'resource': '/empty-template-service:empty-template-service/service=<<prefix>><<sid>>',
         }
 }
-
-if __name__ == '__main__':
-    run_test(parseArgs(), CRUD_TESTS, parameters, 500, 40)

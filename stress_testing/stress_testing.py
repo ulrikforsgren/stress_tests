@@ -387,24 +387,23 @@ class SequenceBatch(Sequence):
 
 
 class SequenceRequestRandomized(SequenceRequest):
-    def __init__(self, n, wrap=None, seed=None, keep_state=False):
+    def __init__(self, length, wrap=None, seed=None, keep_state=False):
         super().__init__(0, wrap, keep_state)
-        self.length = n
+        self.length = length
         self.seed = seed
         self.rnd = random.Random(seed)
+        # TODO: Maybe it is better to do this in update otherwise it will be
+        # done in the runner but not used.
         self.sequence = list(range(self.length))
         self.rnd.shuffle(self.sequence)
-        raise RuntimeWarning('Implementation must be update to support updating scheme')
+        self.n = 0
 
     def __repr__(self):
-        return f'SequenceRequestRandomized(seed={self.seed} length={self.length}, values left={len(self.sequence)})'
+        return f'SequenceRequestRandomized(seed={self.seed} length={self.length}, values left={len(self.sequence)} current={self.current})'
 
-    def __str__(self):
-        try:
-            return str(self.sequence[self.n])
-        except IndexError:
-            return "No more values ({self.n})"
-
+    def __deepcopy__(self, memo):
+        return self.__class__(self.length, self.wrap, self.seed)
+    
     def getstate(self):
         raise RuntimeWarning('Implementation must be update to support updating scheme')
         return (self.n, self.sequence)
@@ -415,8 +414,15 @@ class SequenceRequestRandomized(SequenceRequest):
         self.n, self.sequence = state
         raise RuntimeWarning('Implementation must be update to support updating scheme')
     
-    def update_str(self):
-        return str(self.sequence[self.n])
+    def update_request(self):
+        try:
+            self.current = self.sequence[self.n]
+        except IndexError:
+            self.current = f'<no more values>{self.n}'
+        self.n += 1
+        if self.wrap is not None:
+            self.n = self.n % self.wrap
+        
 
 
 class RandomParameter(Parameter):
