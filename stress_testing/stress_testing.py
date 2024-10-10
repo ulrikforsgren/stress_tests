@@ -148,6 +148,9 @@ def json_to_tuple(json_str):
     return convert(json.loads(json_str))
 
 
+###############################################################################
+#  PARAMETERS
+###############################################################################
 #
 # Classes to inject dynamic values for stressing requests.
 #
@@ -547,9 +550,22 @@ async def default_task(args, parameters, client=None,
     return (*resp, elapsed)
 
 
+###############################################################################
+#  EXECUTORS
+###############################################################################
 #
-# n_p connections are setup for each batch then closed
+# Executes the requested task until the number of parameter['stop'] requests 
+# have been performed. If stop is 0 (default), it will continue forever.
 #
+# batch_executor (currently not implemented) executes requests in batches',
+# with the size of parameter['concurrency'], and waits for them to complete.
+#
+# sliding_window_executor executes requests using a window, of the size:
+# parameter['concurrency'], and starts a new requests as soon one has completed.
+# The parameter['requests-per-second'] can be used to limit the rate,
+# 0 (default) means as fast a possible.
+#
+
 async def batch_executor(args, task_args, parameters, setup_func=setup,
                                 teardown_func=teardown, task_func=default_task):
     results = []
@@ -678,6 +694,11 @@ async def single_request(args, task_args, parameters, setup_func=setup,
     return result
 
 
+###############################################################################
+#  HELPER FUNCTIONS
+###############################################################################
+
+
 async def setup_task(args, client, host):
     # Reading an arbitrary leaf to force the client to setup a connection.
     resource = '/tailf-ncs:devices/global-settings/read-timeout'
@@ -736,6 +757,26 @@ def set_flags(args, d):
         d['query_parameters'] = flags
 
 
+# Generator for 1,2,5,10,20,... sequence
+def np_gen(max_p):
+    n = 1
+    m = 1
+    while n <= max_p:
+        for s in [1, 2, 5]:
+            np = s*m
+            if np < max_p:
+                yield np
+            else:
+                yield max_p
+                return
+        m *= 10
+
+
+###############################################################################
+#  RUNNER FUNCTIONS
+###############################################################################
+
+
 def do_test(args, task_args, parameters, want_results=True, task_func=None, request_cb=None):
     set_flags(args, task_args)
     elapsed, results = asyncio.run(
@@ -768,21 +809,6 @@ def run_test_in_subprocess(args, test_func, task_args, parameters, task_func=Non
         n_p = parameters['concurrency']
         print(f'{op:<6} {count:>5} {n_p:>3} {elapsed:>5.1f} {count/elapsed:>6.1f} {average:>6.3f} {count_wrong:>5} {count_exc:>5}', flush=True)
     return elapsed, count, total, average, count_wrong, count_exc, results
-
-
-# Generator for 1,2,5,10,20,... sequence
-def np_gen(max_p):
-    n = 1
-    m = 1
-    while n <= max_p:
-        for s in [1, 2, 5]:
-            np = s*m
-            if np < max_p:
-                yield np
-            else:
-                yield max_p
-                return
-        m *= 10
 
 
 def run_tests(args, testcases, tests, parameters, no_requests, max_concurrency, task_func=None, do_print=False):
