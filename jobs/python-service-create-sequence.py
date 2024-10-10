@@ -1,4 +1,4 @@
-from stress_testing.stress_testing import (
+from stress_testing.parameters import (
     SequenceRequest,
     RandomValue,
     Calc

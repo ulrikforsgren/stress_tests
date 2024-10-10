@@ -17,14 +17,16 @@ from rich.columns import Columns
 from rich.text import Text
 
 
-from stress_testing.stress_testing import (
-    parseArgs,
+from stress_testing.parameters import (
     Parameters,
     Sequence,
     RandomString,
     Calc,
+)
+from stress_testing.runners import (
     do_test
 )
+from stress_testing.argparser import parseArgs
 from device_manager import create_device, find_capabilities
 
 

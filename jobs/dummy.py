@@ -2,7 +2,7 @@ import asyncio
 import math
 import time
 
-from stress_testing.stress_testing import SequenceRequest, RandomValue
+from stress_testing.parameters import SequenceRequest, RandomValue
 
 async def job(args, ctx, rq, data, extra_params={}):
     ctx.update({

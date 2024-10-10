@@ -1,4 +1,4 @@
-from stress_testing.stress_testing import SequenceRequest, RandomValue
+from stress_testing.parameters import SequenceRequest, RandomValue
 
 start = 0
 stop = 1000

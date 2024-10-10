@@ -5,10 +5,8 @@ import os
 import sys
 import importlib.util
 
-from stress_testing.stress_testing import (
-    parseArgs,
-    run_single_test
-)
+from stress_testing.runners import run_single_test
+from stress_testing.argparser import parseArgs
 
 
 def load_test(args):

@@ -5,9 +5,9 @@
 ### Working on
 
 
+
 ### High Priority
 
-- Wrap random sequence after n requests.
 - Better back propagation mechanism for results.
   - Handle multiprocessing, threading and asyncio
   - ayncio.Queue compatible wrapper for multiprocessing.Queue and queue.Queue
@@ -53,16 +53,6 @@
 - Make grpc port (50052) configurable.
 - Choose batch or sliding window executor.
 
-- Split stress_testing.py:
-  - Executors
-  - ArgParsers
-  - Runners (CRUD, single test, ...)
-  - Tasks
-  - Etc.
-
-- Move away from **task_args?
-- How to push services and wait for them to complete.
-
 
 ## Completed
 
@@ -87,7 +77,15 @@
   - Fix __deepcopy__ to copy current state. TDB
 - Fix how values are update between requests e.g random values. ✅
   - Refactor Parameters to support predictable sequences with multiple sequences 
-    incl. pseudo random sequences. ✅
+    incl. pseudo random sequences. 
+- Wrap random sequence after n requests. ✅
+- Split stress_testing.py:
+  - Executors ✅
+  - ArgParsers ✅
+  - Runners (CRUD, single test, ...) ✅
+  - Parameters ✅
+  - Tasks ✅
+
 
 
 ## Notes:

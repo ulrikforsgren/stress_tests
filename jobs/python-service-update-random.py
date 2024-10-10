@@ -1,4 +1,4 @@
-from stress_testing.stress_testing import RandomValueRequest, RandomString, Calc
+from stress_testing.parameters import RandomValueRequest, RandomString, Calc
 
 start=0
 stop=0 # 0 means continue forever

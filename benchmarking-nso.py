@@ -17,12 +17,9 @@ from prompt_toolkit.shortcuts import PromptSession, CompleteStyle
 from prompt_toolkit.history import FileHistory
 from prompt_toolkit.completion import Completer, Completion, NestedCompleter
 
-from stress_testing.stress_testing import (
-    parseArgs,
-    sliding_window_executor,
-    Parameters,
-    Parameter
-)
+from stress_testing.executors import sliding_window_executor
+from stress_testing.parameters import Parameters, Parameter
+from stress_testing.argparser import parseArgs
 
 import grpc
 import ui_pb2
