@@ -1,10 +1,9 @@
-#!/usr/bin/env python3
-# -*- mode: python; python-indent: 4 -*-
+from stress_testing.stress_testing import (
+    parseArgs,
+    Parameters,
+    Parameter
+)
 
-import sys
-
-from stress_testing.stress_testing import parseArgs, Parameters,\
-     Sequence, RandomValue, run_test
 
 from devices import devices
 
@@ -12,17 +11,11 @@ from devices import devices
 #
 # New Parameter types can be created by extending the Sequence class
 #
-class PopRequest(Sequence):
+class PopRequest(Parameter):
     def __init__(self, l):
         self.l = l
-    def update_str(self):
-        pass
     def update_request(self):
-        self.l.pop(0)
-    def __str__(self):
-        return  str(self.l[0])
-    def update_batch(self):
-        pass
+        self.current = self.l.pop(0)
 
 
 # Paramaters are used to dynamically update the intent (op, resource, data, ...) 
@@ -39,7 +32,7 @@ parameters = Parameters({
 })
 
 
-CRUD_TESTS = {
+tests = {
     '__info':
         {
             'name': 'Run parallel devices device delete-config from a predefined list'
@@ -50,6 +43,3 @@ CRUD_TESTS = {
             'resource': '/tailf-ncs:devices/device=<<dname>>/delete-config',
         },
 }
-
-if __name__ == '__main__':
-    run_test(parseArgs(None, extra_actions=['del-config']), CRUD_TESTS, parameters, 500, 40)
