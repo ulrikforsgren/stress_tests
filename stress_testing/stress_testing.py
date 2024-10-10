@@ -477,18 +477,21 @@ class RandomString(RandomParameter):
         return f'RandomString(length={self.length})'
 
 
-class ContextValue(Parameter):
+class LookupValue(Parameter):
     def __init__(self, values, format, attr):
-        super(ContextValue, self).__init__()
+        super().__init__()
         self.values = values
         self.format = format
         self.attr = attr
 
-    def __copy__(self):
+    def __repr__(self):
+        return f'LookupValue(key={self.key})'
+
+    def __deepcopy__(self):
         return self.__class__(self.values, self.format)
     
     def __str__(self):
-        raise NotImplementedError("ContextValue should not be converted to string")
+        raise NotImplementedError("LoopupValue should not be converted to string")
         
     def get(self, parameters, key):
         try:
@@ -500,8 +503,6 @@ class ContextValue(Parameter):
             print(f'ERROR: {self.format}')
             return "ERROR"
 
-    def current(self):
-        return f'ContextValue(key={self.key})'
 
 
 class Calc:
