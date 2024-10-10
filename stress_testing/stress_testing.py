@@ -694,6 +694,10 @@ async def sliding_window_executor(args, task_args, parameters,
         rps = parameters.get('requests-per-second', 0)
         concurrency = parameters.get('concurrency', 1)
         for _ in range(0, concurrency):
+            if req_count%concurrency == 0:
+                parameters.update_batch() # Update batched parameters
+                # TODO: Is this guaranteed to be executed directly in relation
+                #       to the call to task_func below?
             tasks.add(asyncio.create_task(task_func(args, parameters, **task_args)))
             if rps > 0:
                 await asyncio.sleep(1/(rps/concurrency))
@@ -748,6 +752,10 @@ async def sliding_window_executor(args, task_args, parameters,
                         if d > 0:
                             await asyncio.sleep(d)
                         return await task_func(args, parameters, **task_args)
+                    if req_count%concurrency == 0:
+                        parameters.update_batch() # Update batched parameters
+                        # TODO: Is this guaranteed to be executed directly in relation
+                        #       to the call to task_func below?
                     tasks.add(asyncio.create_task(new_task()))
                     req_count += 1
             if global_parameters:
