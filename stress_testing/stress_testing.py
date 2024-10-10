@@ -614,12 +614,14 @@ class Parameters(dict):
 async def default_task(args, parameters, client=None,
                        host='', op='', resource='', data='',
                        resource_type='data', query_parameters=None):
-
-    resource = format_parameters(parameters, resource)
     if isinstance(data, dict):
         data = json.dumps(data)
-    data = format_parameters(parameters, data)
+    # Update parameters for this request
     parameters.update_request()
+    # Substitute request parameters 
+    resource = format_parameters(parameters, resource)
+    data = format_parameters(parameters, data)
+    # Schedule request and measure execution time
     st = time.monotonic()
     resp = await restconf_request(args,
                                   client,
