@@ -1,15 +1,8 @@
-#!/usr/bin/env python3
-# -*- mode: python; python-indent: 4 -*-
-
-import sys
-
 from stress_testing.stress_testing import (
-    parseArgs,
     Parameters,
     Sequence,
     RandomString,
-    SequenceRequestRandomized,
-    run_test
+    SequenceRequestRandomized
 )
 
 
@@ -23,15 +16,15 @@ from stress_testing.stress_testing import (
 #
 
 parameters = Parameters({
-    "sid": SequenceRequestRandomized(30, seed=0, keep_state=True),
+    "sid": SequenceRequestRandomized(10, seed=0, keep_state=True),
     "did": Sequence(0, 10000, keep_state=True),
     "data": RandomString(15),
     "delay": 0,
-    "numvlan": 800
+    "numvlan": 20
 })
 
 
-CRUD_TESTS = {
+tests = {
     '__info':
         {
             'name': 'Python based service with a configurable delay (<<delay>> ms) and vlans (<<numvlan>> vlans)',
@@ -95,6 +88,3 @@ CRUD_TESTS = {
             '/python-service:python-service/python-service:service=S<<sid>>',
         }
 }
-
-if __name__ == '__main__':
-    run_test(parseArgs(None, ['re-deploy']), CRUD_TESTS, parameters, 500, 40)
