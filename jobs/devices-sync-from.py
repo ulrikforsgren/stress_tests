@@ -6,10 +6,10 @@ stop = 1000
 
 intent = {
   "op": "action",
-  "url": "/tailf-ncs:devices/device=r<<id>>/sync-from"
+  "resource": "/tailf-ncs:devices/device=r<<id>>/sync-from"
 }
 
 parameters = {
-    "did": SequenceRequest(start),
+    "id": SequenceRequest(start),
     "stop": 1000
 }
