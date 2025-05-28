@@ -9,10 +9,10 @@ no_vlan = 1
 
 intent = {
   "op": "create",
-  "url": "/vrouter:vrouter",
+  "resource": "/vrouter:vrouter",
   "data": {
     "service":{
-      "name": "K<<id>>",
+      "name": "S<<id>>",
       "delay": "<<delay>>",
       "template": "vlans",
       "device": "r<<id>>",

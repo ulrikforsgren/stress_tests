@@ -25,7 +25,7 @@ SERVICES = read_services()
 
 intent = {
   "op": "update",
-  "url": "/python-service:python-service/service=S<<id>>",
+  "resource": "/python-service:python-service/service=S<<id>>",
   "data": {
     "service":{
       "str-value": "<<ctxvalue>>"

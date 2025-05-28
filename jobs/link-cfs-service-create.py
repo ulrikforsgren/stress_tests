@@ -7,7 +7,7 @@ delay = 0
 
 intent = {
   "op": "create",
-  "url": "/link-cfs:link-cfs",
+  "resource": "/link-cfs:link-cfs",
   "data": {
     "link-cfs":{
       "name": "S<<id>>",

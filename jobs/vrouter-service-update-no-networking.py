@@ -9,7 +9,7 @@ no_vlan = 1
 
 intent = {
   "op": "update",
-  "url": "/vrouter:vrouter/service=K<<id>>",
+  "resource": "/vrouter:vrouter/service=K<<id>>",
   "data": {
     "service":{
       "delay": "<<delay>>",
