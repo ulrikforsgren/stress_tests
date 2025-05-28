@@ -17,11 +17,17 @@ from rich.columns import Columns
 from rich.text import Text
 
 
-from stress_testing.stress_testing import \
-    Parameters, Sequence, SequenceRequest, \
-    RandomString, RandomValue, SequenceRequestRandomized, \
-    Calc, do_test
-from create_devices import create_device, find_capabilities
+from stress_testing.parameters import (
+    Parameters,
+    Sequence,
+    RandomString,
+    Calc,
+)
+from stress_testing.runners import (
+    do_test
+)
+from stress_testing.argparser import parseArgs
+from device_manager import create_device, find_capabilities
 
 
 # TODO:
@@ -34,9 +40,9 @@ from create_devices import create_device, find_capabilities
 
 # Scale parameters
 numvlan = 20
-devices_batch_size = 50
-create_batch_size = 100
-update_batch_size = 100
+devices_batch_size = 100
+create_batch_size = 10
+update_batch_size = 10
 cpu_check_delay = 5
 
 # TODO: Add "name" to distinguish between different sets of parameters
@@ -45,8 +51,10 @@ parameters = Parameters({
     "sid": RandomString(15, seed=0, keep_state=True),
     "did": Sequence(0, keep_state=True),
     "data": RandomString(15),
-    "start-vlan": Calc('did')
-    "numvlan": numvlan
+    "start-vlan": Calc('did', devices_batch_size, numvlan, 1),
+    "numvlan": numvlan,
+#    "concurrency": 1, # Is having this here a good idea?
+#    "stop": 
 })
 
 
@@ -57,80 +65,48 @@ delete_parameters = copy.deepcopy(parameters)
 
 
 CREATE = {
-            'op': 'create',
-            'url': '/python-service:python-service',
-            'data': '''{
-                        "service":{
-                            "name":"<<sid>>",
-                            "device":"r<<did>>",
-                            "template":["vlans"],
-                            "str-value":"<<data>>",
-                            "num-vlan":<<numvlan>>
-                        }
-                    }'''
+    'op': 'create',
+    'resource': '/python-service:python-service',
+    'data': {
+                "service":{
+                    "name":"<<sid>>",
+                    "device":"r<<did>>",
+                    "template":["vlans"],
+                    "str-value":"<<data>>",
+                    "num-vlan":"<<numvlan>>"
+                }
+    },
+    'query_parameters': {
+        'no-networking': True
+    }
 }
 
 LOAD = {
-            'op': 'update',
-            'url': '/python-service:python-service/'+
-                   'python-service:service=<<sid>>',
-            'data': '''{
-                        "service":{
-                        "template":["one-leaf", "vlans"]
-                        }
-                    }'''
+    'op': 'read',
+    'resource': '/python-service:python-service/'+
+                'python-service:service=<<sid>>',
 }
 
 UPDATE = {
-             'op': 'update',
-             'url': '/python-service:python-service/'+
-                    'python-service:service=<<sid>>',
-             'data': '''{
-                        "service":{
-                            "str-value":"<<data>>",
-                            "num-vlan":<<numvlan>>
-                        }
-                    }'''
+    'op': 'update',
+    'resource': '/python-service:python-service/'+
+                'python-service:service=<<sid>>',
+    'data': {
+            "service":{
+                "str-value":"<<data>>",
+                "num-vlan":"<<numvlan>>"
+        }
+    },
+    'query_parameters': {
+        'no-networking': True
+    }
 }
 
 DELETE = {
-            'op': 'delete',
-            'url': '/python-service:python-service/'+
-                   'python-service:service=<<sid>>'
+    'op': 'delete',
+    'resource': '/python-service:python-service/'+
+                'python-service:service=<<sid>>'
 }            
-
-#
-# Command line arguments
-#
-
-
-def parseArgs(args=None, extra_actions=[]):
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--host', type=str,
-                        help='host[:port]',
-                        default='localhost:8080')
-    parser.add_argument('cmd', nargs='+', choices=['clean', 'run', 'clean'])
-    parser.add_argument("--dry-run", required=False, action='store_true', default=False,
-                        help="Run sequence but do not send request over network.")
-    parser.add_argument("--echo", required=False, action='store_true', default=False,
-                        help="Echo request to console.")
-    parser.add_argument("--keep-state", required=False, action='store_true', default=False,
-                        help="Loads state if state files exist and saves after run.")
-    parser.add_argument("-n", required=False, type=int,
-                        help='Number of total requests.')
-    parser.add_argument("-w", required=False, type=int, default=40,
-                        help='Max window size. Starting 1, 2, 5, .., max')
-    parser.add_argument("-s", required=False, type=str,
-                        help='Window size(s) comma sepated.')
-    parser.add_argument("-p", required=False, type=str, action='append',
-                        help='Alter parameters.')
-    parser.add_argument("-v", required=False, action='store_true',
-                        default=False, help='Verbose mode. Show result of each request.')
-    parser.add_argument("-o", required=False, type=str,
-                        help='Output result in json format to file.')
-    parser.add_argument("--highlight", required=False, action='store_true',
-                        default=False, help='Highlight output to make it more readable.')
-    return parser.parse_args(args)
 
 
 #
@@ -246,9 +222,12 @@ def wait_for_cpu_to_idle(p, threshold=5, progress_cb=None):
 # Test functions
 #
 
-def run_test(args, intent, n, n_p, parameters, task=None, progress_cb=None):
+# NOTE: Should n, n_p be part of the parameters?
+def run_test(args, intent, n, n_p, parameters, progress_cb=None):
     # TODO: Move host to context?
     intent['host'] = args.host
+    parameters['concurrency'] = n_p
+    parameters['stop'] = n 
     #parameters.load_state()
     lt = None
     c = 0
@@ -267,10 +246,10 @@ def run_test(args, intent, n, n_p, parameters, task=None, progress_cb=None):
             lt = time.monotonic()
             progress_cb(f' {c}/{n}  ok: [green]{ok}[/green] nok: [red]{nok}[/red] exc: [yellow]{exc}[/yellow]')
 
-    elapsed, ok, total, nok, exc, results = do_test(
-        args, n, n_p, intent, parameters, request_cb=request_cb)
-    #parameters.save_state()
 
+    elapsed, ok, total, nok, exc, _results = do_test(
+        args, intent, parameters, want_results=True, request_cb=request_cb)
+    #parameters.save_state()
     return ((elapsed, ok, nok, exc), f'{n} requests, {n_p} concurrent  ok: [green]{ok}[/green] nok: [red]{nok}[/red] exc: [yellow]{exc}[/yellow]')
 
 
@@ -285,12 +264,17 @@ def create_devices(name, start, n_devices, progress_cb=None):
             n_s = n
             n_c = 0
             for _ in range(0, batch_size):
-                create_device(r.devices, f'{name}{start+n}', 'localhost',
-                              10000, 'cli', 'cisco-ios-cli-3.0', 'default',
+                create_device(r,
+                              f'{name}{start+n}', # name
+                              'localhost', # address
+                              10000, # port
+                              'cli', # device_protocol
+                              'cisco-ios-cli-3.0', # device_type
+                              'default', # authgroup
                               False)
                 n += 1
                 n_c += 1
-                if n_c>=batch_size or n>n_devices: break
+                if n>=n_devices: break
             t.apply()
             if progress_cb:
                 progress_cb(f' {n}/{n_devices}')
@@ -299,6 +283,7 @@ def create_devices(name, start, n_devices, progress_cb=None):
                 break
 
     return (None, f'{n_devices} devices in batches of {batch_size}')
+
 
 def find_devices_capabilities(name, start, n_devices, progress_cb=None):
     with ncs.maapi.single_read_trans('admin', 'system') as t:
@@ -353,6 +338,8 @@ def run(args):
             if n%10 == 0:
                 dn+=1
                 log('create-devices', create_devices, ('r', dn*devices_batch_size, devices_batch_size))
+                log('find-devices-capabilities', find_devices_capabilities, ('r', dn*devices_batch_size, devices_batch_size))
+
                 #break
             log('create', run_test, (args, CREATE, create_batch_size, 15, create_parameters))
             log('load', run_test, (args, LOAD, create_batch_size, 15, load_parameters))
@@ -368,11 +355,13 @@ def clean(args):
 
 
 def main(args):
-    if args.cmd[0] == 'run':
-        run(args)
-    elif args.cmd[0] == 'clean':
-        clean(args)
-    else:
-        print('Unknown command:', args.cmd[0])
+    for cmd in args.cmd:
+        if cmd == 'run':
+            run(args)
+        elif cmd == 'clean':
+            clean(args)
+        else:
+            print(f'Unknown command {cmd}')
+            
 if __name__ == '__main__':
-    main(parseArgs())
+    main(parseArgs(options='scripted'))

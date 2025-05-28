@@ -1,0 +1,28 @@
+syntax = "proto3";
+
+package ui;
+
+
+message Empty {
+}
+
+message GetRequest {
+    uint32 history = 1; // How many history scronds to return
+  }
+
+message Metric {
+  uint32 timestamp = 1;
+  uint32 ok = 2;
+  uint32 nok = 3;
+}
+
+message GetResponse {
+   repeated Metric metrics = 1;
+}
+
+// Interface exported by the server.
+service UI {
+    rpc Get(GetRequest) returns (GetResponse) {}
+    rpc Subscribe(Empty) returns (stream Metric) {}
+  }
+  

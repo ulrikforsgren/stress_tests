@@ -65,10 +65,17 @@ parameters = {
         }
 }
 
+cmd_text = {
+    'create': 'created',
+    'delete': 'deleted',
+    'find': 'capabilities found',
+    'fetch': 'fetch ssh host keys'
+}
 
-def create_device(devices, name, address, port, t, nedid, authgrp,
+
+def create_device(r, name, address, port, t, nedid, authgrp,
                   accept_out_of_sync=False):
-    device = devices.device
+    device = r.devices.device
     dev = device.create(name)
     dev.address = address
     dev.port = port
@@ -118,27 +125,28 @@ def main(args):
                 r = ncs.maagic.get_root(m)
             dt, nedid = NEDIDs[args.type]
             if args.cmd == 'create':
-                create_device(r.devices, f'{args.name}{n}', args.address,
+                create_device(r, f'{args.name}{n}', args.address,
                               args.port+n%1000, dt, nedid, 'default',
                               args.accept_out_of_sync)
             elif args.cmd == 'delete':
                 del r.devices.device[f'{args.name}{n}']
             elif args.cmd == 'find':
                 result = find_capabilities(r.devices, f'{args.name}{n}')
-                print(result)
+#                print(result)
             elif args.cmd == 'fetch':
                 result = fetch_host_keys(r.devices, f'{args.name}{n}')
-                print(result)
+#                print(result)
             elif args.cmd == 'create-group':
                 result = fetch_host_keys(r.devices, f'{args.name}{n}')
-                print(result)
+#                print(result)
             n += 1
             if n>=n_devices: break
         if parameters[args.cmd]['needs_transaction']:
             t.apply()
             t = ncs.maapi.Transaction(m, db=ncs.RUNNING,rw=ncs.READ_WRITE)
         elap = time.monotonic()-start
-        print(f"Devices {args.name}{x}-{args.name}{n-1} created in ", elap, "seconds.")
+        dnames = f"{args.name}{x}-{args.name}{n-1}" if n-x>1 else f"{args.name}{x}"
+        print(f"Devices {dnames} {cmd_text[args.cmd]} in ", elap, "seconds.")
         if n>=n_devices:
             do_stuff = False
             break
