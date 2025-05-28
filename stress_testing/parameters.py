@@ -34,7 +34,10 @@ def format_parameters(parameters, string, update=True):
         p = parameters[key]
         if update:
             if isinstance(p, Parameter):
-                p.update_str()
+                if isinstance(p, Calc):
+                    p.update_str(parameters)
+                else:
+                    p.update_str()
         return str(p)
     return re_sub.sub(lambda m: update_str(parameters, m.group(1)), string)
 
