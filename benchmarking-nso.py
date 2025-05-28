@@ -278,7 +278,7 @@ async def command_handler(args, result_queue, cq):
                                 else:
                                     running_jobs[cmdargs[0]] = {
                                         'task': asyncio.create_task(
-                                            job_executor(cmdargs[0], job_data(args, global_parameters, None, cmd_params=cmd_params, result_queue=result_queue))),
+                                            job_executor(cmdargs[0], job_data(args, global_parameters, cmd_params=cmd_params, result_queue=result_queue))),
                                         'ctx': global_parameters
                                     }
                                 # cq.put({'cmd': 'start'})
