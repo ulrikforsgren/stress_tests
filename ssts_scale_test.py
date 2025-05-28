@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 # -*- mode: python; python-indent: 4 -*-
 
-import argparse
 import copy
 import datetime
 import sys
@@ -23,10 +22,10 @@ from stress_testing.parameters import (
     RandomString,
     Calc,
 )
-from stress_testing.runners import (
+from stress_tests.runners import (
     do_test
 )
-from stress_testing.argparser import parseArgs
+from stress_tests.argparser import parseArgs
 from device_manager import create_device, find_capabilities
 
 
