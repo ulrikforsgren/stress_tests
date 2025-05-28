@@ -19,7 +19,7 @@ from prompt_toolkit.completion import Completer, Completion, NestedCompleter
 
 from stress_testing.executors import sliding_window_executor
 from stress_testing.parameters import Parameters, Parameter
-from stress_testing.argparser import parseArgs
+from stress_tests.argparser import parseArgs
 
 import grpc
 import ui_pb2
