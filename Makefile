@@ -151,9 +151,16 @@ build-pkgs: pkg-repo/BUILT
 pkg-repo/BUILT:
 	for i in $(shell find pkg-repo -type d -maxdepth 1 -mindepth 1); do \
 	  echo "==== Building $${i} ===="; \
-	  $(MAKE) -C $${i}/src all || exit 1; \
+	  $(MAKE) -C $${i}/src clean all || exit 1; \
 	done
 	touch pkg-repo/BUILT
+
+.PHONY: rebuild-pkgs
+rebuild-pkgs:
+	for i in $(shell find pkg-repo -type d -maxdepth 1 -mindepth 1); do \
+	  echo "==== Building $${i} ===="; \
+	  $(MAKE) -C $${i}/src all || exit 1; \
+	done
 
 .PHONY: venv
 venv: venv/bin/activate
