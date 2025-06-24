@@ -36,4 +36,4 @@ typing_extensions==4.10.0
 urllib3==2.0.7
 wcwidth==0.2.9
 yarl==1.9.4
-stress-testing @ git+ssh://git@github.com/ulrikforsgren/stress-testing.git@v0.1.1
+stress-testing @ git+https://git@github.com/ulrikforsgren/stress-testing.git@v0.1.1
