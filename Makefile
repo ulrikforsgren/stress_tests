@@ -162,6 +162,13 @@ rebuild-pkgs:
 	  $(MAKE) -C $${i}/src all || exit 1; \
 	done
 
+.PHONY: rebuild-pkgs2
+rebuild-pkgs2:
+	for i in $(shell find packages -maxdepth 1 -mindepth 1); do \
+	  echo "==== Building $${i} ===="; \
+	  $(MAKE) -C $${i}/src clean all || exit 1; \
+	done
+
 .PHONY: venv
 venv: venv/bin/activate
 venv/bin/activate:
