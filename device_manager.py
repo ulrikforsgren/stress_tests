@@ -8,17 +8,10 @@ import time
 import ncs
 
 
-NEDIDs = {
-    'router':    [ 'netconf', 'router-nc-1.0' ],
-    'ios-cli':   [ 'cli',     'cisco-ios-cli-3.0' ],
-    'nx-cli':    [ 'cli',     'cisco-nx-cli-5.22' ],
-    'iosxr-cli': [ 'cli',     'cisco-iosxr-cli-7.38' ],
-}
-
 
 def parseArgs(cmd_args):
     parser = argparse.ArgumentParser(cmd_args)
-    parser.add_argument('-n', '--name', required=True, default='ce',
+    parser.add_argument('-n', '--name', required=False, default='r',
                         help="Device name")
     parser.add_argument('-g', '--group', default='g',
                         help="Group name")
@@ -33,15 +26,18 @@ def parseArgs(cmd_args):
     parser.add_argument('-a', '--address', type=str, default='localhost',
                         help="Device address")
     parser.add_argument('-t', '--type',
-                        choices=['ios-cli', 'nx-cli', 'ios-xr', 'router'],
-                        default='ios-cli',
+                        choices=['cli', 'netconf'],
+                        default='cli',
+                        help="Type of device")
+    parser.add_argument('--nid', type=str,
+                        default='cisco-ios-cli-3.0',
                         help="Type of device")
     parser.add_argument('--accept-out-of-sync',
                         action='store_true', default=False,
                         help="Device address")
     parser.add_argument('cmd',
                         choices=['create', 'delete', 'find', 'fetch', 'sync-from',
-                                 'create-group'],
+                                 'create-group', 'list-ned-ids'],
                         help="Command")
     return parser.parse_args()
 
@@ -106,13 +102,21 @@ def fetch_host_keys(devices, name):
 
 
 def main(args):
+    m = ncs.maapi.Maapi()
+    s = ncs.maapi.Session(m, "admin", "system")
+    if args.cmd == 'list-ned-ids':
+        t = ncs.maapi.Transaction(m, db=ncs.OPERATIONAL,rw=ncs.READ)
+        r = ncs.maagic.get_root(t)
+        ned_ids = set()
+        for e in r.devices.ned_ids.ned_id:
+            print(e.id)
+        return
+
     n = args.i
     n_devices = args.count
     p_devices = parameters[args.cmd]['p_devices']
 
     do_stuff = True
-    m = ncs.maapi.Maapi()
-    s = ncs.maapi.Session(m, "admin", "system")
     while do_stuff:
         if parameters[args.cmd]['needs_transaction']:
             t = ncs.maapi.Transaction(m, db=ncs.RUNNING,rw=ncs.READ_WRITE)
@@ -123,7 +127,8 @@ def main(args):
                 r = ncs.maagic.get_root(t)
             else:
                 r = ncs.maagic.get_root(m)
-            dt, nedid = NEDIDs[args.type]
+            dt = args.type
+            nedid = args.nid
             if args.cmd == 'create':
                 create_device(r, f'{args.name}{n}', args.address,
                               args.port+n%1000, dt, nedid, 'default',
