@@ -20,7 +20,7 @@ parameters = Parameters({
     'did': SequenceRequest(0),
     'data': RandomValue(0, 4000000000),
     'delay': 100,
-    'numvlan': 100
+    'numvlan': 1
 })
 
 

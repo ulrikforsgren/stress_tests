@@ -20,7 +20,7 @@ def parseArgs(args=None, extra_cmds=[], options='old-crud', path=None):
             'report',
             'highlight',
         ]
-        commands += ['clean', 'create', 'read', 'update', 'delete', 'crud', 'cud']
+        commands += ['clean', 'create', 'read', 'update', 're-deploy', 'delete', 'crud', 'crurd', 'cud']
     elif 'old-crud' in options:
         options += ['single']
     elif 'benchmarking' in options:

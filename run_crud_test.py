@@ -55,6 +55,8 @@ def main(args):
         for c in args.cmd:
             if c == 'crud':
                 testcases += ['create', 'read', 'update', 'delete']
+            elif c == 'crurd':
+                testcases += ['create', 'read', 'update', 're-deploy', 'delete']
             elif c == 'cud':
                 testcases += ['create', 'update', 'delete']
             else:
