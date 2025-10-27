@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <!-- Required meta tags -->
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Benchmarking NSO</title>
+    <!--Chart.js JS CDN-->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/luxon/3.4.4/luxon.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-adapter-luxon/1.2.1/chartjs-adapter-luxon.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-streaming/2.0.0/chartjs-plugin-streaming.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.js"></script>
+
+    <style type="text/css">
+        .chartBox {
+            width: 1200px;
+        }
+        .dropdown {
+            position: relative;
+            display: inline-block;
+        }
+        .dropbtn {
+            background-color: #4CAF50;
+            color: white;
+            padding: 16px;
+            font-size: 16px;
+            border: none;
+            cursor: pointer;
+        }
+        .dropdown-content {
+            display: none;
+            position: absolute;
+            background-color: #f9f9f9;
+            min-width: 160px;
+            box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2);
+            padding: 12px 16px;
+            z-index: 1;
+        }
+        .dropdown:hover .dropdown-content {
+            display: block;
+        }
+        .dropdown-item {
+            display: block;
+        }
+    </style>
+  </head>
+  <body>
+    <!-- Add dropdown box for window size -->
+    <div class="dropdown">
+      <button class="dropbtn">Select Window Size</button>
+      <div class="dropdown-content">
+        <a class="dropdown-item" href="#" onclick="set_windowsize(10)">10 seconds</a>
+        <a class="dropdown-item" href="#" onclick="set_windowsize(60)">1 minutes</a>
+        <a class="dropdown-item" href="#" onclick="set_windowsize(300)">5 minutes</a>
+        <a class="dropdown-item" href="#" onclick="set_windowsize(900)">15 minutes</a>
+        <a class="dropdown-item" href="#" onclick="set_windowsize(1800)">30 minutes</a>
+        <a class="dropdown-item" href="#" onclick="set_windowsize(3600)">1 hour</a>
+        <a class="dropdown-item" href="#" onclick="set_windowsize(7200)">2 hours</a>
+        <a class="dropdown-item" href="#" onclick="set_windowsize(14400)">4 hours</a>
+        <a class="dropdown-item" href="#" onclick="set_windowsize(21600)">6 hours</a>
+      </div>
+    </div>
+    <!-- Add dropdown box for rolling average window size -->
+    <div class="dropdown">
+        <button class="dropbtn">Select Rolling Average Size</button>
+        <div class="dropdown-content">
+          <a class="dropdown-item" href="#" onclick="set_rolling_average(3)">3 seconds</a>
+          <a class="dropdown-item" href="#" onclick="set_rolling_average(5)">5 seconds</a>
+          <a class="dropdown-item" href="#" onclick="set_rolling_average(10)">10 seconds</a>
+          <a class="dropdown-item" href="#" onclick="set_rolling_average(15)">15 seconds</a>
+          <a class="dropdown-item" href="#" onclick="set_rolling_average(30)">30 seconds</a>
+          <a class="dropdown-item" href="#" onclick="set_rolling_average(60)">1 minute</a>
+        </div>
+      </div>
+    <div class="chartBox">
+      <canvas id="myChart"></canvas>
+    </div>
+
+    <script>
+        var windowsize = 300;
+
+
+        function set_windowsize(size) {
+            windowsize = size;
+            console.log("Setting windowsize to", windowsize)
+            options.scales.x.realtime.duration = windowsize * 1000;
+            socket.emit('start', { 
+                windowsize: windowsize,
+                timestamp: Date.now(), 
+            })
+        }
+
+        function set_rolling_average(size) {
+            console.log("Setting rolling average to", size)
+            rolling_window = [];
+            rolling_average_size = size;
+
+            myChart.data.datasets[2].data = [];
+            rolling_window = [];
+            myChart.data.datasets[0].data.forEach(function(item) {
+                average = push_avg({
+                    ok: item.y,                
+                });
+                myChart.data.datasets[2].data.push({
+                    x: item.x,
+                    y: average
+                });
+            });
+            myChart.update();
+        }
+
+        const data = {
+            datasets: [
+            {
+                lineTension: 0.0,
+                label: 'OK',
+                borderColor: '#7e95cd',
+                backgroundColor: '#7bb6dd',
+                fill: false,
+                cubicInterpolationMode: 'monotone',
+            },
+            {
+                lineTension: 0.0,
+                label: 'NOK',
+                borderColor: '#ee353d',
+                backgroundColor: '#ecb6dd',
+                fill: false,
+                cubicInterpolationMode: 'monotone',
+            },
+            {
+                lineTension: 0.0,
+                label: 'Average',
+                borderColor: '#3e951d',
+                backgroundColor: '#3cb62d',
+                fill: false,
+                cubicInterpolationMode: 'monotone',
+            }
+
+            ],
+        };
+
+        // options block
+        var options = {
+            animation: {
+                duration: 0,
+            },
+            layout: {
+                padding: 0,
+            },
+            plugins: {
+                title: {
+                display: true,
+                align: 'center',
+                font: {
+                    size: 40,
+                },
+                text: "Benchmarking NSO",
+                },
+            },
+            scales: {
+                x: {
+                    type: 'realtime',
+                    realtime: {
+                        duration: windowsize * 1000,
+                        delay: 2000,
+                        refresh: 1000
+                    },
+                    text: "Concurrent requests",
+                },
+                y: {
+                display: true,
+                beginAtZero: true,
+                title: {
+                    display: true,
+                    font: {
+                    size: 25,
+                    },
+                    text: "Requests per second",
+                },
+                },
+            },
+        };
+
+        // config block
+        const config = {
+            type: 'line',
+            options: options,
+            data: data
+        };
+
+        // render init block
+        const myChart = new Chart(
+        document.getElementById('myChart'),
+        config
+        );
+
+        var socket = io();
+
+        socket.on('connect', function() {
+            console.log("Connected.");
+            socket.emit('start', { 
+                windowsize: windowsize,
+                timestamp: Date.now(), 
+            })
+        });
+
+        socket.on('disconnect', function() {
+            console.log("Disconnected")
+        });
+
+        var rolling_window = [];
+        var rolling_average_size = 10;
+
+        function push_avg(metric) {
+            rolling_window.push(metric.ok);
+            if (rolling_window.length > rolling_average_size) {
+                rolling_window.shift();
+            }
+            return rolling_window.reduce((a, b) => a + b, 0) / rolling_window.length;
+        }
+
+        socket.on('startdata', function(data) {
+            console.log("startdata event", data)
+            rolling_window = [];
+            myChart.data.datasets.forEach(function(dataset) {
+                dataset.data = [];
+            });
+            data.forEach(function(item) {
+                myChart.data.datasets[0].data.push({
+                    x: item.ts,
+                    y: item.ok,
+                });
+                myChart.data.datasets[1].data.push({
+                    x: item.ts,
+                    y: item.nok,
+                });
+                var average = push_avg(item);
+                myChart.data.datasets[2].data.push({
+                    x: item.ts,
+                    y: average
+                });
+            });
+            myChart.update();
+        });
+
+        socket.on('value', function(metric) {
+            //console.log("value event", metric)
+            var data = myChart.data.datasets[0].data
+            // Get last value from data
+            if (data.length > 0) {
+                last = data[data.length - 1];
+                if (last.x == metric.ok) {
+                    console.log("Ignoring duplicate value", metric)
+                    return
+                }
+            }
+
+            data.push({
+                x: metric.ts,
+                y: metric.ok,
+            });
+            myChart.data.datasets[1].data.push({
+                    x: metric.ts,
+                    y: metric.nok,
+                });
+            var average = push_avg(metric);
+            myChart.data.datasets[2].data.push({
+                x: metric.ts,
+                y: average
+            });
+            myChart.update();
+        });
+
+    </script>
+
+    <div id="charts" style="margin: 250px"></div>
+  </body>
+</html>
