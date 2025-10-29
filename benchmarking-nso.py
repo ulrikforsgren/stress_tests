@@ -178,6 +178,7 @@ class DictKeyCompleter(Completer):
         word = document.get_word_before_cursor()
         start = document.find_previous_word_beginning(1)
         start2 = document.find_previous_word_beginning(2)
+        print(word)
         if start2 is None and not (start is not None and word == ''):
             for k in self.d.keys():
                 if k.startswith(word):
@@ -189,19 +190,23 @@ class DictDictKeyCompleter(Completer):
         self.d = d
 
     def get_completions(self, document, complete_event):
-        word = document.get_word_before_cursor()
-        start = document.find_previous_word_beginning(1)
-        start2 = document.find_previous_word_beginning(2)
-        start3 = document.find_previous_word_beginning(3)
+        # Treat only spaces as separators to avoid splitting on '-'
+        text = document.text_before_cursor
+        ends_with_space = bool(text) and text[-1].isspace()
+        stripped = text.rstrip()
+        tokens = re.split(r"\s+", stripped) if stripped else []
 
-        if start2 is None and not (start is not None and word == ''):
+        # Current word prefix (only space-separated)
+        word = '' if ends_with_space else (tokens[-1] if tokens else '')
+
+        # If no tokens yet, or we're typing the first token: complete job names
+        if len(tokens) <= 1 and not (len(tokens) == 1 and ends_with_space):
             for k in self.d.keys():
                 if k.startswith(word):
                     yield Completion(k, start_position=-len(word))
-        elif start3 is None and not (start2 is not None and word == ''):
-            s = start if start2 is None else start2
-            e = -1 if start2 is None else start-1
-            name = document.text_before_cursor[s:e]
+        else:
+            # tokens[0] is the job name; complete its ctx keys next
+            name = tokens[0] if tokens else ''
             if name in self.d:
                 for k in self.d[name]['ctx'].keys():
                     if k.startswith(word):
@@ -494,30 +499,35 @@ notifications = ProdCons()
 
 async def amain(args, rq, cq):
     global request_task
-    request_task = asyncio.create_task(command_handler(args, rq, cq))
-    metrics_task = asyncio.create_task(metrics_handler(args, rq))
+    try:
+        request_task = asyncio.create_task(command_handler(args, rq, cq))
+        metrics_task = asyncio.create_task(metrics_handler(args, rq))
 
-    server = grpc.aio.server()
-    ui_pb2_grpc.add_UIServicer_to_server(UIServicer(args), server)
-    server.add_insecure_port('[::]:50052')
-    await server.start()
-    ui_api = asyncio.create_task(server.wait_for_termination())
-    await asyncio.wait([request_task, metrics_task, ui_api], return_when=asyncio.FIRST_COMPLETED)
-    request_task = None
-    await server.stop(None)
-    await server.wait_for_termination()
+        server = grpc.aio.server()
+        ui_pb2_grpc.add_UIServicer_to_server(UIServicer(args), server)
+        server.add_insecure_port('[::]:50052')
+        await server.start()
+        ui_api = asyncio.create_task(server.wait_for_termination())
+        await asyncio.wait([request_task, metrics_task, ui_api], return_when=asyncio.FIRST_COMPLETED)
+        request_task = None
+        await server.stop(None)
+        await server.wait_for_termination()
+    except asyncio.CancelledError:
+        pass
 
 async def stop_request_task():
     request_task.cancel()
 
 
 def main(args):
-    global global_parameters, jobs
-    global_parameters['host'] = args.host
-    jobs = get_jobs(args.path)
-    rq = asyncio.Queue(maxsize=8192)
-    asyncio.run(amain(args, rq, None))
-
+    try:
+        global global_parameters, jobs
+        global_parameters['host'] = args.host
+        jobs = get_jobs(args.path)
+        rq = asyncio.Queue(maxsize=8192)
+        asyncio.run(amain(args, rq, None))
+    except asyncio.CancelledError:
+        pass
 
 if __name__ == '__main__':
     main(parseArgs(options='benchmarking', path='jobs'))
