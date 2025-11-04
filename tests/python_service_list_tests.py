@@ -39,11 +39,11 @@ tests = {
             'op': 'action',
             'resource':
             '/python-service:python-service/service=<<prefix>><<sid>>/re-deploy',
-            'data': {
-                    "input" : {
-                        "dry-run":  {}
-                    }
-                },
+#            'data': {
+#                    "input" : {
+#                        "dry-run":  {}
+#                    }
+#                },
         },
     'create':
         {
