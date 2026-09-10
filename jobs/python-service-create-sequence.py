@@ -1,6 +1,7 @@
 from stress_testing.parameters import (
     SequenceRequest,
     RandomValue,
+    RandomString,
     Calc
 )
 
@@ -24,7 +25,7 @@ intent = {
       "device": "r<<did>>",
       "start-vlan": "<<startvlan>>",
       "num-vlan": "<<numvlan>>",
-      "str-value": rstr.letters(15)
+      "str-value": "<<strvalue>>"
     }
   },
   "query_parameters": {
@@ -37,6 +38,7 @@ parameters = {
     "sid": SequenceRequest(start),
     "did": SequenceRequest(start%no_devices, no_devices),
     "data": RandomValue(0, 4000000000),
+    "strvalue": RandomString(15),
     "delay": 0,
     "startvlan": Calc('sid', no_devices, num_vlan, 1),
     "numvlan": num_vlan,
