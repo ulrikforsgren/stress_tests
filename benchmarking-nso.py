@@ -93,24 +93,59 @@ last = {
 }
 
 
-def get_jobs(path):
+job_files_mtime = {}
+
+
+def get_job_files(path):
     jobs_directory_path = f'{os.path.dirname(os.path.abspath(__file__))}/{path}'
     files = os.listdir(jobs_directory_path)
+    return {
+        filename.removesuffix('.py'): f'{jobs_directory_path}/{filename}'
+        for filename in files
+        if filename.endswith('.py') and filename != '__init__.py'
+    }
+
+
+def get_jobs(path):
     jobs = dict()
-    for filename in files:
-        if filename.endswith('.py') and filename != '__init__.py':
-            module_name = filename.removesuffix('.py')
-            spec = importlib.util.spec_from_file_location(f'jobs.{module_name}', f'{jobs_directory_path}/{filename}')
-            module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(module)
-            if hasattr(module, 'intent'):
-                jobs[module_name] = (module.intent, module.parameters)
-            elif hasattr(module, 'job'):
-                jobs[module_name] = module.job
-            else:
-                print(f"ERROR: Module {module_name} does not contain 'intent' or 'job' function")
-                sys.exit(1)
+    for module_name, filename in get_job_files(path).items():
+        spec = importlib.util.spec_from_file_location(f'jobs.{module_name}', filename)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        if hasattr(module, 'intent'):
+            jobs[module_name] = (module.intent, module.parameters)
+        elif hasattr(module, 'job'):
+            jobs[module_name] = module.job
+        else:
+            print(f"ERROR: Module {module_name} does not contain 'intent' or 'job' function")
+            sys.exit(1)
     return jobs
+
+
+def update_job_files_mtime(path):
+    global job_files_mtime
+    job_files_mtime = {
+        name: os.path.getmtime(filename)
+        for name, filename in get_job_files(path).items()
+    }
+
+
+def reload_jobs_if_updated(path, current_jobs):
+    files = get_job_files(path)
+    current_mtime = {
+        name: os.path.getmtime(filename)
+        for name, filename in files.items()
+    }
+    changed = sorted(
+        name for name, mtime in current_mtime.items()
+        if job_files_mtime.get(name) != mtime
+    )
+    removed = sorted(set(current_jobs) - set(files))
+    if not changed and not removed:
+        return current_jobs, changed, removed
+    jobs = get_jobs(path)
+    update_job_files_mtime(path)
+    return jobs, changed, removed
 
     
 async def job(args, parameters, job_data, cmd_params=None, result_queue=None):
@@ -246,6 +281,7 @@ def get_commands(jobs):
                 'job': DictDictKeyCompleter(running_jobs)
                 }, "Set job parameters."),
         "jobs": (None, "Show running jobs."),
+        "reload-jobs": (None, "Reload job modules if job files changed."),
         "last": (None, "Show last request result and error."),
         "clear": (None, "Clear graph data."),   # TODO: Fix for webui
         "help": (None, "Show this help."),
@@ -326,6 +362,25 @@ async def command_handler(args, result_queue, cq):
                                     print(f'{i}: {name}')
                             else:
                                 print("No running jobs.")
+                        elif cmd == 'reload-jobs':
+                            jobs, changed, removed = reload_jobs_if_updated(args.path, jobs)
+                            commands, completer = get_commands(jobs)
+                            if not changed and not removed:
+                                print('No job changes detected.')
+                            else:
+                                if changed:
+                                    print('Reloaded jobs:')
+                                    for name in changed:
+                                        print(f'- {name}')
+                                if removed:
+                                    print('Removed jobs:')
+                                    for name in removed:
+                                        print(f'- {name}')
+                                running_changed = sorted((set(changed) | set(removed)).intersection(running_jobs))
+                                if running_changed:
+                                    print('Running jobs changed; restart them to use updated definitions:')
+                                    for name in running_changed:
+                                        print(f'- {name}')
                         elif cmd == 'show':
                             if cmdargs[0] == 'global':
                                 for k, v in global_parameters.items():
@@ -553,6 +608,7 @@ def main(args):
         global global_parameters, jobs
         global_parameters['host'] = args.host
         jobs = get_jobs(args.path)
+        update_job_files_mtime(args.path)
         rq = asyncio.Queue(maxsize=8192)
         asyncio.run(amain(args, rq, None))
     except asyncio.CancelledError:
