@@ -312,7 +312,9 @@ async def command_handler(args, result_queue, cq):
                                 for k, v in global_parameters.items():
                                     print(f'{k:<20}: {v}')
                             elif cmdargs[0] == 'job':
-                                if cmdargs[1] in jobs:
+                                if len(cmdargs) < 2:
+                                    print('Missing job name.')
+                                elif cmdargs[1] in running_jobs:
                                     for k, v in running_jobs[cmdargs[1]]['ctx'].items():
                                         if isinstance(v, Parameter):
                                             print(f'{k:<20}: {repr(v)}')
@@ -321,7 +323,14 @@ async def command_handler(args, result_queue, cq):
                                 else:
                                     print('Invalid job name.')
                             elif cmdargs[0] == 'completed':
-                                if cmdargs[1] in completed_jobs:
+                                if len(cmdargs) == 1:
+                                    if completed_jobs:
+                                        print('Completed jobs:')
+                                        for i, name in enumerate(completed_jobs.keys(), 1):
+                                            print(f'{i}: {name}')
+                                    else:
+                                        print('No completed jobs.')
+                                elif cmdargs[1] in completed_jobs:
                                     for k, v in completed_jobs[cmdargs[1]].items():
                                         if isinstance(v, Parameter):
                                             print(f'{k:<20}: {repr(v)}')
