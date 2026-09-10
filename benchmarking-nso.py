@@ -5,6 +5,7 @@ import asyncio
 from collections import deque
 from datetime import datetime, timedelta
 import importlib.util
+import logging
 import os
 import pprint as pp
 import re
@@ -29,6 +30,24 @@ import ui_pb2_grpc
 #############################################################################
 #  Support functions
 #############################################################################
+
+def configure_logging(args):
+    if not args.echo and not args.log_file:
+        return
+    handlers = []
+    if args.echo:
+        handlers.append(logging.StreamHandler(sys.stderr))
+    if args.log_file:
+        handlers.append(logging.FileHandler(args.log_file))
+    logging.basicConfig(
+        level=logging.DEBUG,
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+        handlers=handlers,
+    )
+    logging.getLogger("asyncio").setLevel(logging.WARNING)
+    logging.getLogger("grpc").setLevel(logging.WARNING)
+    logging.getLogger("grpc._cython.cygrpc").setLevel(logging.WARNING)
+
 
 # Useful for debugging
 pprint = pp.PrettyPrinter(indent=4).pprint
@@ -530,6 +549,7 @@ async def stop_request_task():
 
 def main(args):
     try:
+        configure_logging(args)
         global global_parameters, jobs
         global_parameters['host'] = args.host
         jobs = get_jobs(args.path)

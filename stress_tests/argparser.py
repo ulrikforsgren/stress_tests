@@ -57,6 +57,8 @@ def parseArgs(args=None, extra_cmds=[], options='old-crud', path=None):
                             help="Run sequence but do not send request over network.")
         parser.add_argument("--echo", required=False, action='store_true', default=False,
                             help="Echo request to console.")
+        parser.add_argument("--log-file", required=False, type=str,
+                            help="Write echo/debug logs to this file.")
         parser.add_argument("-q", required=False, action='store_true',
                             default=False, help='Silent mode.')
         parser.add_argument("-v", required=False, action='store_true',
