@@ -13,28 +13,70 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.js"></script>
 
     <style type="text/css">
+        body {
+            font-family: Arial, Helvetica, sans-serif;
+        }
         .chartBox {
             width: 1200px;
+        }
+        .header {
+            position: relative;
+            width: 1200px;
+            margin: 12px 0 4px;
+            min-height: 86px;
+        }
+        .header-title {
+            position: absolute;
+            left: 0;
+            right: 440px;
+            top: 0;
+            color: #333;
+            font-size: 40px;
+            font-weight: bold;
+            text-align: center;
+            line-height: 1.2;
+        }
+        .toolbar {
+            position: absolute;
+            left: 760px;
+            top: 4px;
+            display: flex;
+            gap: 10px;
+        }
+        .selected-values {
+            position: absolute;
+            left: 760px;
+            top: 42px;
+            color: #555;
+            font-size: 12px;
+            font-weight: normal;
+            line-height: 1.35;
         }
         .dropdown {
             position: relative;
             display: inline-block;
         }
         .dropbtn {
-            background-color: #4CAF50;
+            background-color: #7e95cd;
             color: white;
-            padding: 16px;
-            font-size: 16px;
+            padding: 7px 12px;
+            font-size: 13px;
             border: none;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.18);
             cursor: pointer;
+        }
+        .dropbtn:hover {
+            background-color: #657fbf;
         }
         .dropdown-content {
             display: none;
             position: absolute;
-            background-color: #f9f9f9;
-            min-width: 160px;
-            box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2);
-            padding: 12px 16px;
+            background-color: white;
+            min-width: 145px;
+            box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.16);
+            border-radius: 5px;
+            padding: 6px 0;
             z-index: 1;
         }
         .dropdown:hover .dropdown-content {
@@ -42,47 +84,77 @@
         }
         .dropdown-item {
             display: block;
+            color: #333;
+            padding: 6px 12px;
+            font-size: 13px;
+            text-decoration: none;
+        }
+        .dropdown-item:hover {
+            background-color: #f1f4fb;
         }
     </style>
   </head>
   <body>
-    <!-- Add dropdown box for window size -->
-    <div class="dropdown">
-      <button class="dropbtn">Select Window Size</button>
-      <div class="dropdown-content">
-        <a class="dropdown-item" href="#" onclick="set_windowsize(10)">10 seconds</a>
-        <a class="dropdown-item" href="#" onclick="set_windowsize(60)">1 minutes</a>
-        <a class="dropdown-item" href="#" onclick="set_windowsize(300)">5 minutes</a>
-        <a class="dropdown-item" href="#" onclick="set_windowsize(900)">15 minutes</a>
-        <a class="dropdown-item" href="#" onclick="set_windowsize(1800)">30 minutes</a>
-        <a class="dropdown-item" href="#" onclick="set_windowsize(3600)">1 hour</a>
-        <a class="dropdown-item" href="#" onclick="set_windowsize(7200)">2 hours</a>
-        <a class="dropdown-item" href="#" onclick="set_windowsize(14400)">4 hours</a>
-        <a class="dropdown-item" href="#" onclick="set_windowsize(21600)">6 hours</a>
-      </div>
-    </div>
-    <!-- Add dropdown box for rolling average window size -->
-    <div class="dropdown">
-        <button class="dropbtn">Select Rolling Average Size</button>
-        <div class="dropdown-content">
-          <a class="dropdown-item" href="#" onclick="set_rolling_average(3)">3 seconds</a>
-          <a class="dropdown-item" href="#" onclick="set_rolling_average(5)">5 seconds</a>
-          <a class="dropdown-item" href="#" onclick="set_rolling_average(10)">10 seconds</a>
-          <a class="dropdown-item" href="#" onclick="set_rolling_average(15)">15 seconds</a>
-          <a class="dropdown-item" href="#" onclick="set_rolling_average(30)">30 seconds</a>
-          <a class="dropdown-item" href="#" onclick="set_rolling_average(60)">1 minute</a>
+    <div class="header">
+      <div class="header-title">Benchmarking NSO</div>
+      <div class="toolbar">
+        <div class="dropdown">
+          <button class="dropbtn">Window Size</button>
+          <div class="dropdown-content">
+            <a class="dropdown-item" href="#" onclick="set_windowsize(10)">10 seconds</a>
+            <a class="dropdown-item" href="#" onclick="set_windowsize(60)">1 minutes</a>
+            <a class="dropdown-item" href="#" onclick="set_windowsize(300)">5 minutes</a>
+            <a class="dropdown-item" href="#" onclick="set_windowsize(900)">15 minutes</a>
+            <a class="dropdown-item" href="#" onclick="set_windowsize(1800)">30 minutes</a>
+            <a class="dropdown-item" href="#" onclick="set_windowsize(3600)">1 hour</a>
+            <a class="dropdown-item" href="#" onclick="set_windowsize(7200)">2 hours</a>
+            <a class="dropdown-item" href="#" onclick="set_windowsize(14400)">4 hours</a>
+            <a class="dropdown-item" href="#" onclick="set_windowsize(21600)">6 hours</a>
+          </div>
+        </div>
+        <div class="dropdown">
+          <button class="dropbtn">Rolling Average</button>
+          <div class="dropdown-content">
+            <a class="dropdown-item" href="#" onclick="set_rolling_average(3)">3 seconds</a>
+            <a class="dropdown-item" href="#" onclick="set_rolling_average(5)">5 seconds</a>
+            <a class="dropdown-item" href="#" onclick="set_rolling_average(10)">10 seconds</a>
+            <a class="dropdown-item" href="#" onclick="set_rolling_average(15)">15 seconds</a>
+            <a class="dropdown-item" href="#" onclick="set_rolling_average(30)">30 seconds</a>
+            <a class="dropdown-item" href="#" onclick="set_rolling_average(60)">1 minute</a>
+          </div>
         </div>
       </div>
+      <div class="selected-values">
+        <div id="selected-window-size"></div>
+        <div id="selected-rolling-average"></div>
+      </div>
+    </div>
     <div class="chartBox">
       <canvas id="myChart"></canvas>
     </div>
 
     <script>
         var windowsize = 300;
+        var rolling_average_size = 10;
 
+        function format_duration(size) {
+            if (size >= 3600) {
+                return `${size / 3600} hour${size === 3600 ? '' : 's'}`;
+            }
+            if (size >= 60) {
+                return `${size / 60} minute${size === 60 ? '' : 's'}`;
+            }
+            return `${size} seconds`;
+        }
+
+        function update_selected_values() {
+            document.getElementById('selected-window-size').textContent = `Window size: ${format_duration(windowsize)}`;
+            document.getElementById('selected-rolling-average').textContent = `Rolling average: ${format_duration(rolling_average_size)}`;
+        }
 
         function set_windowsize(size) {
             windowsize = size;
+            update_selected_values();
             console.log("Setting windowsize to", windowsize)
             options.scales.x.realtime.duration = windowsize * 1000;
             socket.emit('start', { 
@@ -95,6 +167,7 @@
             console.log("Setting rolling average to", size)
             rolling_window = [];
             rolling_average_size = size;
+            update_selected_values();
 
             myChart.data.datasets[2].data = [];
             rolling_window = [];
@@ -150,13 +223,13 @@
             },
             plugins: {
                 title: {
-                display: true,
+                display: false,
                 align: 'center',
                 font: {
                     size: 40,
                 },
                 text: "Benchmarking NSO",
-                },
+                }
             },
             scales: {
                 x: {
@@ -195,6 +268,8 @@
         config
         );
 
+        update_selected_values();
+
         var socket = io();
 
         socket.on('connect', function() {
@@ -210,7 +285,6 @@
         });
 
         var rolling_window = [];
-        var rolling_average_size = 10;
 
         function push_avg(metric) {
             rolling_window.push(metric.ok);
