@@ -9,6 +9,8 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/luxon/3.4.4/luxon.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-adapter-luxon/1.2.1/chartjs-adapter-luxon.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8/hammer.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@1.2.1/dist/chartjs-plugin-zoom.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-streaming/2.0.0/chartjs-plugin-streaming.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.js"></script>
 
@@ -23,12 +25,12 @@
             position: relative;
             width: 1200px;
             margin: 12px 0 4px;
-            min-height: 86px;
+            min-height: 96px;
         }
         .header-title {
             position: absolute;
             left: 0;
-            right: 440px;
+            right: 600px;
             top: 0;
             color: #333;
             font-size: 40px;
@@ -38,14 +40,14 @@
         }
         .toolbar {
             position: absolute;
-            left: 760px;
+            left: 600px;
             top: 4px;
             display: flex;
             gap: 10px;
         }
         .selected-values {
             position: absolute;
-            left: 760px;
+            left: 600px;
             top: 42px;
             color: #555;
             font-size: 12px;
@@ -123,10 +125,13 @@
             <a class="dropdown-item" href="#" onclick="set_rolling_average(60)">1 minute</a>
           </div>
         </div>
+        <button id="pause-button" class="dropbtn" onclick="toggle_pause()">Pause</button>
+        <button class="dropbtn" onclick="reset_view()">Reset Zoom</button>
       </div>
       <div class="selected-values">
         <div id="selected-window-size"></div>
         <div id="selected-rolling-average"></div>
+        <div id="visible-range"></div>
       </div>
     </div>
     <div class="chartBox">
@@ -136,6 +141,11 @@
     <script>
         var windowsize = 300;
         var rolling_average_size = 10;
+        var normal_delay = 2000;
+        var history_retention = 3600;
+        var view_mode = 'live';
+        var zoom_input_type = null;
+        var metrics_by_timestamp = new Map();
 
         function format_duration(size) {
             if (size >= 3600) {
@@ -147,39 +157,128 @@
             return `${size} seconds`;
         }
 
+        function configured_duration() {
+            return Math.min(windowsize, history_retention) * 1000;
+        }
+
         function update_selected_values() {
             document.getElementById('selected-window-size').textContent = `Window size: ${format_duration(windowsize)}`;
             document.getElementById('selected-rolling-average').textContent = `Rolling average: ${format_duration(rolling_average_size)}`;
+        }
+
+        function update_visible_range() {
+            var scale = myChart.scales.x;
+            if (!Number.isFinite(scale.min) || !Number.isFinite(scale.max)) {
+                return;
+            }
+            var start = luxon.DateTime.fromMillis(scale.min).toFormat('HH:mm:ss');
+            var end = luxon.DateTime.fromMillis(scale.max).toFormat('HH:mm:ss');
+            var mode = view_mode === 'paused' ? 'Paused' : 'Live';
+            document.getElementById('visible-range').textContent = `${mode}: ${start}–${end}`;
+        }
+
+        function set_view_mode(mode) {
+            view_mode = mode;
+            options.scales.x.realtime.pause = mode === 'paused';
+            document.getElementById('pause-button').textContent = mode === 'paused' ? 'Resume' : 'Pause';
+        }
+
+        function pause_chart() {
+            set_view_mode('paused');
+            myChart.update('none');
+            update_visible_range();
+        }
+
+        function resume_live() {
+            myChart.resetZoom('none');
+            options.scales.x.realtime.duration = configured_duration();
+            options.scales.x.realtime.delay = normal_delay;
+            set_view_mode('live');
+            myChart.update('none');
+            update_visible_range();
+        }
+
+        function toggle_pause() {
+            if (view_mode === 'paused') {
+                resume_live();
+            } else {
+                pause_chart();
+            }
+        }
+
+        function reset_view() {
+            myChart.resetZoom('none');
+            options.scales.x.realtime.duration = configured_duration();
+            options.scales.x.realtime.delay = normal_delay;
+            myChart.update('none');
+            update_visible_range();
+        }
+
+        function clamp_view_to_history() {
+            var realtime = options.scales.x.realtime;
+            realtime.duration = Math.max(1000, Math.min(realtime.duration, history_retention * 1000));
+            var max_delay = Math.max(0, history_retention * 1000 - realtime.duration);
+            realtime.delay = Math.max(0, Math.min(realtime.delay, max_delay));
+        }
+
+        function handle_pan_complete({chart}) {
+            clamp_view_to_history();
+            chart.update('none');
+            update_visible_range();
+        }
+
+        function handle_zoom_start({event}) {
+            zoom_input_type = event.type;
+        }
+
+        function handle_zoom_complete({chart}) {
+            var scale_options = chart.options.scales.x;
+            if (zoom_input_type === 'mousedown' && Number.isFinite(scale_options.min) && Number.isFinite(scale_options.max)) {
+                var selected_min = scale_options.min;
+                var selected_max = scale_options.max;
+                chart.resetZoom('none');
+                options.scales.x.realtime.duration = Math.max(1000, Math.min(selected_max - selected_min, history_retention * 1000));
+                options.scales.x.realtime.delay = Math.max(0, Date.now() - selected_max);
+                set_view_mode('paused');
+            }
+            zoom_input_type = null;
+            clamp_view_to_history();
+            chart.update('none');
+            update_visible_range();
+        }
+
+        function set_history_retention(retention) {
+            retention = Number(retention);
+            if (!Number.isFinite(retention) || retention < 1) {
+                return;
+            }
+            history_retention = retention;
+            options.scales.x.realtime.ttl = history_retention * 1000;
+            options.plugins.zoom.limits.x.maxDelay = history_retention * 1000;
+            options.plugins.zoom.limits.x.maxDuration = history_retention * 1000;
+            options.scales.x.realtime.duration = view_mode === 'live'
+                ? configured_duration()
+                : Math.min(options.scales.x.realtime.duration, history_retention * 1000);
+            clamp_view_to_history();
+            trim_history();
         }
 
         function set_windowsize(size) {
             windowsize = size;
             update_selected_values();
             console.log("Setting windowsize to", windowsize)
-            options.scales.x.realtime.duration = windowsize * 1000;
-            socket.emit('start', { 
+            resume_live();
+            socket.emit('start', {
                 windowsize: windowsize,
-                timestamp: Date.now(), 
+                timestamp: Date.now(),
             })
         }
 
         function set_rolling_average(size) {
             console.log("Setting rolling average to", size)
-            rolling_window = [];
             rolling_average_size = size;
             update_selected_values();
-
-            myChart.data.datasets[2].data = [];
-            rolling_window = [];
-            myChart.data.datasets[0].data.forEach(function(item) {
-                average = push_avg({
-                    ok: item.y,                
-                });
-                myChart.data.datasets[2].data.push({
-                    x: item.x,
-                    y: average
-                });
-            });
+            rebuild_datasets();
             myChart.update();
         }
 
@@ -229,15 +328,49 @@
                     size: 40,
                 },
                 text: "Benchmarking NSO",
-                }
+                },
+                zoom: {
+                    pan: {
+                        enabled: true,
+                        mode: 'x',
+                        modifierKey: 'ctrl',
+                        onPanComplete: handle_pan_complete,
+                    },
+                    zoom: {
+                        wheel: {
+                            enabled: true,
+                        },
+                        drag: {
+                            enabled: true,
+                            threshold: 5,
+                            backgroundColor: 'rgba(126, 149, 205, 0.2)',
+                            borderColor: '#7e95cd',
+                            borderWidth: 1,
+                        },
+                        pinch: {
+                            enabled: true,
+                        },
+                        mode: 'x',
+                        onZoomStart: handle_zoom_start,
+                        onZoomComplete: handle_zoom_complete,
+                    },
+                    limits: {
+                        x: {
+                            minDelay: 0,
+                            minDuration: 1000,
+                        },
+                    },
+                },
             },
             scales: {
                 x: {
                     type: 'realtime',
                     realtime: {
                         duration: windowsize * 1000,
-                        delay: 2000,
-                        refresh: 1000
+                        ttl: history_retention * 1000,
+                        delay: normal_delay,
+                        refresh: 1000,
+                        pause: false
                     },
                     text: "Concurrent requests",
                 },
@@ -269,6 +402,8 @@
         );
 
         update_selected_values();
+        update_visible_range();
+        setInterval(update_visible_range, 1000);
 
         var socket = io();
 
@@ -294,55 +429,83 @@
             return rolling_window.reduce((a, b) => a + b, 0) / rolling_window.length;
         }
 
-        socket.on('startdata', function(data) {
-            console.log("startdata event", data)
+        function merge_metric(metric) {
+            var normalized = {
+                ts: Number(metric.ts),
+                ok: Number(metric.ok),
+                nok: Number(metric.nok),
+            };
+            if (!Number.isFinite(normalized.ts) || !Number.isFinite(normalized.ok) || !Number.isFinite(normalized.nok)) {
+                return false;
+            }
+            var current = metrics_by_timestamp.get(normalized.ts);
+            if (current && current.ok === normalized.ok && current.nok === normalized.nok) {
+                return false;
+            }
+            metrics_by_timestamp.set(normalized.ts, normalized);
+            return true;
+        }
+
+        function append_metric(metric) {
+            myChart.data.datasets[0].data.push({x: metric.ts, y: metric.ok});
+            myChart.data.datasets[1].data.push({x: metric.ts, y: metric.nok});
+            myChart.data.datasets[2].data.push({x: metric.ts, y: push_avg(metric)});
+        }
+
+        function rebuild_datasets() {
             rolling_window = [];
             myChart.data.datasets.forEach(function(dataset) {
                 dataset.data = [];
             });
-            data.forEach(function(item) {
-                myChart.data.datasets[0].data.push({
-                    x: item.ts,
-                    y: item.ok,
-                });
-                myChart.data.datasets[1].data.push({
-                    x: item.ts,
-                    y: item.nok,
-                });
-                var average = push_avg(item);
-                myChart.data.datasets[2].data.push({
-                    x: item.ts,
-                    y: average
-                });
+            Array.from(metrics_by_timestamp.values())
+                .sort((a, b) => a.ts - b.ts)
+                .forEach(append_metric);
+        }
+
+        function trim_history() {
+            if (metrics_by_timestamp.size === 0) {
+                return;
+            }
+            var latest = -Infinity;
+            metrics_by_timestamp.forEach(function(metric) {
+                latest = Math.max(latest, metric.ts);
             });
+            var cutoff = latest - history_retention * 1000;
+            metrics_by_timestamp.forEach(function(metric, timestamp) {
+                if (timestamp < cutoff) {
+                    metrics_by_timestamp.delete(timestamp);
+                }
+            });
+            myChart.data.datasets.forEach(function(dataset) {
+                dataset.data = dataset.data.filter(item => item.x >= cutoff);
+            });
+        }
+
+        socket.on('startdata', function(payload) {
+            console.log("startdata event", payload)
+            set_history_retention(payload.retention);
+            payload.metrics.forEach(merge_metric);
+            trim_history();
+            rebuild_datasets();
             myChart.update();
         });
 
         socket.on('value', function(metric) {
-            //console.log("value event", metric)
-            var data = myChart.data.datasets[0].data
-            // Get last value from data
-            if (data.length > 0) {
-                last = data[data.length - 1];
-                if (last.x == metric.ok) {
-                    console.log("Ignoring duplicate value", metric)
-                    return
-                }
+            var data = myChart.data.datasets[0].data;
+            var existing = metrics_by_timestamp.has(Number(metric.ts));
+            if (!merge_metric(metric)) {
+                console.log("Ignoring duplicate value", metric)
+                return;
             }
-
-            data.push({
-                x: metric.ts,
-                y: metric.ok,
-            });
-            myChart.data.datasets[1].data.push({
-                    x: metric.ts,
-                    y: metric.nok,
-                });
-            var average = push_avg(metric);
-            myChart.data.datasets[2].data.push({
-                x: metric.ts,
-                y: average
-            });
+            trim_history();
+            data = myChart.data.datasets[0].data;
+            var last = data.length > 0 ? data[data.length - 1] : null;
+            var normalized = metrics_by_timestamp.get(Number(metric.ts));
+            if (!existing && (!last || last.x < normalized.ts)) {
+                append_metric(normalized);
+            } else {
+                rebuild_datasets();
+            }
             myChart.update();
         });
 

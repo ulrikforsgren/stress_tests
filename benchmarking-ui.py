@@ -53,9 +53,9 @@ def get_metrics(history=300):
             response = stub.Get(ui_pb2.GetRequest(history=history))
             for m in response.metrics:
                 metrics.append((m.timestamp, m.ok, m.nok))
-        return metrics
+        return metrics, response.retention
     except _InactiveRpcError:
-        return []
+        return [], 0
     
 
 @app.route("/")
@@ -65,13 +65,11 @@ def r_index():
 
 @socketio.on('start')
 def handle_message(data):
-    global metrics
     print(f'start: received message: {data}')
     print('Time difference client-server (ms):', data['timestamp']-time.time()*1000)
-    windowsize = data['windowsize']
-    metrics = get_metrics(windowsize)
+    metrics, retention = get_metrics(0)
     data = [{ 'ts': m[0]*1000, 'ok': m[1], 'nok': m[2]} for m in metrics]
-    emit('startdata', data)
+    emit('startdata', {'metrics': data, 'retention': retention})
 
 
 if __name__ == "__main__":
