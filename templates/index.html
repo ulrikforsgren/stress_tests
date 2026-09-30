@@ -141,6 +141,11 @@
     <script>
         var windowsize = 300;
         var rolling_average_size = 10;
+        var normal_delay = 2000;
+        var history_retention = 3600;
+        var view_mode = 'live';
+        var zoom_input_type = null;
+        var metrics_by_timestamp = new Map();
 
         function format_duration(size) {
             if (size >= 3600) {
@@ -150,6 +155,10 @@
                 return `${size / 60} minute${size === 60 ? '' : 's'}`;
             }
             return `${size} seconds`;
+        }
+
+        function configured_duration() {
+            return Math.min(windowsize, history_retention) * 1000;
         }
 
         function update_selected_values() {
@@ -162,56 +171,114 @@
             if (!Number.isFinite(scale.min) || !Number.isFinite(scale.max)) {
                 return;
             }
-            var mode = options.scales.x.realtime.pause ? 'Paused' : 'Live';
             var start = luxon.DateTime.fromMillis(scale.min).toFormat('HH:mm:ss');
             var end = luxon.DateTime.fromMillis(scale.max).toFormat('HH:mm:ss');
+            var mode = view_mode === 'paused' ? 'Paused' : 'Live';
             document.getElementById('visible-range').textContent = `${mode}: ${start}–${end}`;
         }
 
-        function toggle_pause() {
-            var realtime = options.scales.x.realtime;
-            realtime.pause = !realtime.pause;
-            document.getElementById('pause-button').textContent = realtime.pause ? 'Resume' : 'Pause';
+        function set_view_mode(mode) {
+            view_mode = mode;
+            options.scales.x.realtime.pause = mode === 'paused';
+            document.getElementById('pause-button').textContent = mode === 'paused' ? 'Resume' : 'Pause';
+        }
+
+        function pause_chart() {
+            set_view_mode('paused');
             myChart.update('none');
             update_visible_range();
+        }
+
+        function resume_live() {
+            myChart.resetZoom('none');
+            options.scales.x.realtime.duration = configured_duration();
+            options.scales.x.realtime.delay = normal_delay;
+            set_view_mode('live');
+            myChart.update('none');
+            update_visible_range();
+        }
+
+        function toggle_pause() {
+            if (view_mode === 'paused') {
+                resume_live();
+            } else {
+                pause_chart();
+            }
         }
 
         function reset_view() {
             myChart.resetZoom('none');
-            options.scales.x.realtime.duration = windowsize * 1000;
-            options.scales.x.realtime.delay = 2000;
+            options.scales.x.realtime.duration = configured_duration();
+            options.scales.x.realtime.delay = normal_delay;
             myChart.update('none');
             update_visible_range();
+        }
+
+        function clamp_view_to_history() {
+            var realtime = options.scales.x.realtime;
+            realtime.duration = Math.max(1000, Math.min(realtime.duration, history_retention * 1000));
+            var max_delay = Math.max(0, history_retention * 1000 - realtime.duration);
+            realtime.delay = Math.max(0, Math.min(realtime.delay, max_delay));
+        }
+
+        function handle_pan_complete({chart}) {
+            clamp_view_to_history();
+            chart.update('none');
+            update_visible_range();
+        }
+
+        function handle_zoom_start({event}) {
+            zoom_input_type = event.type;
+        }
+
+        function handle_zoom_complete({chart}) {
+            var scale_options = chart.options.scales.x;
+            if (zoom_input_type === 'mousedown' && Number.isFinite(scale_options.min) && Number.isFinite(scale_options.max)) {
+                var selected_min = scale_options.min;
+                var selected_max = scale_options.max;
+                chart.resetZoom('none');
+                options.scales.x.realtime.duration = Math.max(1000, Math.min(selected_max - selected_min, history_retention * 1000));
+                options.scales.x.realtime.delay = Math.max(0, Date.now() - selected_max);
+                set_view_mode('paused');
+            }
+            zoom_input_type = null;
+            clamp_view_to_history();
+            chart.update('none');
+            update_visible_range();
+        }
+
+        function set_history_retention(retention) {
+            retention = Number(retention);
+            if (!Number.isFinite(retention) || retention < 1) {
+                return;
+            }
+            history_retention = retention;
+            options.scales.x.realtime.ttl = history_retention * 1000;
+            options.plugins.zoom.limits.x.maxDelay = history_retention * 1000;
+            options.plugins.zoom.limits.x.maxDuration = history_retention * 1000;
+            options.scales.x.realtime.duration = view_mode === 'live'
+                ? configured_duration()
+                : Math.min(options.scales.x.realtime.duration, history_retention * 1000);
+            clamp_view_to_history();
+            trim_history();
         }
 
         function set_windowsize(size) {
             windowsize = size;
             update_selected_values();
             console.log("Setting windowsize to", windowsize)
-            options.scales.x.realtime.duration = windowsize * 1000;
-            socket.emit('start', { 
+            resume_live();
+            socket.emit('start', {
                 windowsize: windowsize,
-                timestamp: Date.now(), 
+                timestamp: Date.now(),
             })
         }
 
         function set_rolling_average(size) {
             console.log("Setting rolling average to", size)
-            rolling_window = [];
             rolling_average_size = size;
             update_selected_values();
-
-            myChart.data.datasets[2].data = [];
-            rolling_window = [];
-            myChart.data.datasets[0].data.forEach(function(item) {
-                average = push_avg({
-                    ok: item.y,                
-                });
-                myChart.data.datasets[2].data.push({
-                    x: item.x,
-                    y: average
-                });
-            });
+            rebuild_datasets();
             myChart.update();
         }
 
@@ -267,7 +334,7 @@
                         enabled: true,
                         mode: 'x',
                         modifierKey: 'ctrl',
-                        onPanComplete: update_visible_range,
+                        onPanComplete: handle_pan_complete,
                     },
                     zoom: {
                         wheel: {
@@ -275,6 +342,7 @@
                         },
                         drag: {
                             enabled: true,
+                            threshold: 5,
                             backgroundColor: 'rgba(126, 149, 205, 0.2)',
                             borderColor: '#7e95cd',
                             borderWidth: 1,
@@ -283,7 +351,8 @@
                             enabled: true,
                         },
                         mode: 'x',
-                        onZoomComplete: update_visible_range,
+                        onZoomStart: handle_zoom_start,
+                        onZoomComplete: handle_zoom_complete,
                     },
                     limits: {
                         x: {
@@ -298,7 +367,8 @@
                     type: 'realtime',
                     realtime: {
                         duration: windowsize * 1000,
-                        delay: 2000,
+                        ttl: history_retention * 1000,
+                        delay: normal_delay,
                         refresh: 1000,
                         pause: false
                     },
@@ -359,55 +429,83 @@
             return rolling_window.reduce((a, b) => a + b, 0) / rolling_window.length;
         }
 
-        socket.on('startdata', function(data) {
-            console.log("startdata event", data)
+        function merge_metric(metric) {
+            var normalized = {
+                ts: Number(metric.ts),
+                ok: Number(metric.ok),
+                nok: Number(metric.nok),
+            };
+            if (!Number.isFinite(normalized.ts) || !Number.isFinite(normalized.ok) || !Number.isFinite(normalized.nok)) {
+                return false;
+            }
+            var current = metrics_by_timestamp.get(normalized.ts);
+            if (current && current.ok === normalized.ok && current.nok === normalized.nok) {
+                return false;
+            }
+            metrics_by_timestamp.set(normalized.ts, normalized);
+            return true;
+        }
+
+        function append_metric(metric) {
+            myChart.data.datasets[0].data.push({x: metric.ts, y: metric.ok});
+            myChart.data.datasets[1].data.push({x: metric.ts, y: metric.nok});
+            myChart.data.datasets[2].data.push({x: metric.ts, y: push_avg(metric)});
+        }
+
+        function rebuild_datasets() {
             rolling_window = [];
             myChart.data.datasets.forEach(function(dataset) {
                 dataset.data = [];
             });
-            data.forEach(function(item) {
-                myChart.data.datasets[0].data.push({
-                    x: item.ts,
-                    y: item.ok,
-                });
-                myChart.data.datasets[1].data.push({
-                    x: item.ts,
-                    y: item.nok,
-                });
-                var average = push_avg(item);
-                myChart.data.datasets[2].data.push({
-                    x: item.ts,
-                    y: average
-                });
+            Array.from(metrics_by_timestamp.values())
+                .sort((a, b) => a.ts - b.ts)
+                .forEach(append_metric);
+        }
+
+        function trim_history() {
+            if (metrics_by_timestamp.size === 0) {
+                return;
+            }
+            var latest = -Infinity;
+            metrics_by_timestamp.forEach(function(metric) {
+                latest = Math.max(latest, metric.ts);
             });
+            var cutoff = latest - history_retention * 1000;
+            metrics_by_timestamp.forEach(function(metric, timestamp) {
+                if (timestamp < cutoff) {
+                    metrics_by_timestamp.delete(timestamp);
+                }
+            });
+            myChart.data.datasets.forEach(function(dataset) {
+                dataset.data = dataset.data.filter(item => item.x >= cutoff);
+            });
+        }
+
+        socket.on('startdata', function(payload) {
+            console.log("startdata event", payload)
+            set_history_retention(payload.retention);
+            payload.metrics.forEach(merge_metric);
+            trim_history();
+            rebuild_datasets();
             myChart.update();
         });
 
         socket.on('value', function(metric) {
-            //console.log("value event", metric)
-            var data = myChart.data.datasets[0].data
-            // Get last value from data
-            if (data.length > 0) {
-                last = data[data.length - 1];
-                if (last.x == metric.ts) {
-                    console.log("Ignoring duplicate value", metric)
-                    return
-                }
+            var data = myChart.data.datasets[0].data;
+            var existing = metrics_by_timestamp.has(Number(metric.ts));
+            if (!merge_metric(metric)) {
+                console.log("Ignoring duplicate value", metric)
+                return;
             }
-
-            data.push({
-                x: metric.ts,
-                y: metric.ok,
-            });
-            myChart.data.datasets[1].data.push({
-                    x: metric.ts,
-                    y: metric.nok,
-                });
-            var average = push_avg(metric);
-            myChart.data.datasets[2].data.push({
-                x: metric.ts,
-                y: average
-            });
+            trim_history();
+            data = myChart.data.datasets[0].data;
+            var last = data.length > 0 ? data[data.length - 1] : null;
+            var normalized = metrics_by_timestamp.get(Number(metric.ts));
+            if (!existing && (!last || last.x < normalized.ts)) {
+                append_metric(normalized);
+            } else {
+                rebuild_datasets();
+            }
             myChart.update();
         });
 

@@ -18,6 +18,7 @@ message Metric {
 
 message GetResponse {
    repeated Metric metrics = 1;
+   uint32 retention = 2;
 }
 
 // Interface exported by the server.

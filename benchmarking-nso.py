@@ -552,8 +552,11 @@ class UIServicer(ui_pb2_grpc.UIServicer):
     async def Get(self, request: ui_pb2.GetRequest,
                    unused_context) -> ui_pb2.GetResponse:
         global metrics_history
-        response = ui_pb2.GetResponse()
-        for timestamp, ok, nok in metrics_history:
+        response = ui_pb2.GetResponse(retention=self.args.history)
+        history = list(metrics_history)
+        if request.history:
+            history = history[-request.history:]
+        for timestamp, ok, nok in history:
             metric = ui_pb2.Metric(
                 timestamp=int(timestamp),
                 ok=ok,
