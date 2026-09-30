@@ -296,7 +296,7 @@ async def command_handler(args, result_queue, cq):
     global global_parameters, last, jobs
     req_task = None
     commands, completer = get_commands(jobs)
-    cmd_history = FileHistory(".benchmarching_nso_history")
+    cmd_history = FileHistory(".benchmarking_nso_history")
     with patch_stdout():
         session = PromptSession("benchmarking-nso> ", history=cmd_history)
         try:
