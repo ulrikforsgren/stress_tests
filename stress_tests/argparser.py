@@ -95,6 +95,9 @@ def parseArgs(args=None, extra_cmds=[], options='old-crud', path=None):
     if 'benchmarking' in options:
         parser.add_argument('--history', type=int, default=3600,
                              help='How many seconds to keep history data.')
+        parser.add_argument('--metrics-db', type=str,
+                            default='benchmarking-metrics.db',
+                            help='SQLite database used to persist metrics.')
     if 'highlight' in options:
         parser.add_argument("--highlight", required=False, action='store_true',
                             default=False, help='Highlight output to make it more readable.')
