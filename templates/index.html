@@ -9,6 +9,8 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/luxon/3.4.4/luxon.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-adapter-luxon/1.2.1/chartjs-adapter-luxon.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8/hammer.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@1.2.1/dist/chartjs-plugin-zoom.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-streaming/2.0.0/chartjs-plugin-streaming.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.js"></script>
 
@@ -23,12 +25,12 @@
             position: relative;
             width: 1200px;
             margin: 12px 0 4px;
-            min-height: 86px;
+            min-height: 96px;
         }
         .header-title {
             position: absolute;
             left: 0;
-            right: 440px;
+            right: 600px;
             top: 0;
             color: #333;
             font-size: 40px;
@@ -38,14 +40,14 @@
         }
         .toolbar {
             position: absolute;
-            left: 760px;
+            left: 600px;
             top: 4px;
             display: flex;
             gap: 10px;
         }
         .selected-values {
             position: absolute;
-            left: 760px;
+            left: 600px;
             top: 42px;
             color: #555;
             font-size: 12px;
@@ -123,10 +125,13 @@
             <a class="dropdown-item" href="#" onclick="set_rolling_average(60)">1 minute</a>
           </div>
         </div>
+        <button id="pause-button" class="dropbtn" onclick="toggle_pause()">Pause</button>
+        <button class="dropbtn" onclick="reset_view()">Reset Zoom</button>
       </div>
       <div class="selected-values">
         <div id="selected-window-size"></div>
         <div id="selected-rolling-average"></div>
+        <div id="visible-range"></div>
       </div>
     </div>
     <div class="chartBox">
@@ -150,6 +155,33 @@
         function update_selected_values() {
             document.getElementById('selected-window-size').textContent = `Window size: ${format_duration(windowsize)}`;
             document.getElementById('selected-rolling-average').textContent = `Rolling average: ${format_duration(rolling_average_size)}`;
+        }
+
+        function update_visible_range() {
+            var scale = myChart.scales.x;
+            if (!Number.isFinite(scale.min) || !Number.isFinite(scale.max)) {
+                return;
+            }
+            var mode = options.scales.x.realtime.pause ? 'Paused' : 'Live';
+            var start = luxon.DateTime.fromMillis(scale.min).toFormat('HH:mm:ss');
+            var end = luxon.DateTime.fromMillis(scale.max).toFormat('HH:mm:ss');
+            document.getElementById('visible-range').textContent = `${mode}: ${start}–${end}`;
+        }
+
+        function toggle_pause() {
+            var realtime = options.scales.x.realtime;
+            realtime.pause = !realtime.pause;
+            document.getElementById('pause-button').textContent = realtime.pause ? 'Resume' : 'Pause';
+            myChart.update('none');
+            update_visible_range();
+        }
+
+        function reset_view() {
+            myChart.resetZoom('none');
+            options.scales.x.realtime.duration = windowsize * 1000;
+            options.scales.x.realtime.delay = 2000;
+            myChart.update('none');
+            update_visible_range();
         }
 
         function set_windowsize(size) {
@@ -229,7 +261,37 @@
                     size: 40,
                 },
                 text: "Benchmarking NSO",
-                }
+                },
+                zoom: {
+                    pan: {
+                        enabled: true,
+                        mode: 'x',
+                        modifierKey: 'ctrl',
+                        onPanComplete: update_visible_range,
+                    },
+                    zoom: {
+                        wheel: {
+                            enabled: true,
+                        },
+                        drag: {
+                            enabled: true,
+                            backgroundColor: 'rgba(126, 149, 205, 0.2)',
+                            borderColor: '#7e95cd',
+                            borderWidth: 1,
+                        },
+                        pinch: {
+                            enabled: true,
+                        },
+                        mode: 'x',
+                        onZoomComplete: update_visible_range,
+                    },
+                    limits: {
+                        x: {
+                            minDelay: 0,
+                            minDuration: 1000,
+                        },
+                    },
+                },
             },
             scales: {
                 x: {
@@ -237,7 +299,8 @@
                     realtime: {
                         duration: windowsize * 1000,
                         delay: 2000,
-                        refresh: 1000
+                        refresh: 1000,
+                        pause: false
                     },
                     text: "Concurrent requests",
                 },
@@ -269,6 +332,8 @@
         );
 
         update_selected_values();
+        update_visible_range();
+        setInterval(update_visible_range, 1000);
 
         var socket = io();
 
@@ -324,7 +389,7 @@
             // Get last value from data
             if (data.length > 0) {
                 last = data[data.length - 1];
-                if (last.x == metric.ok) {
+                if (last.x == metric.ts) {
                     console.log("Ignoring duplicate value", metric)
                     return
                 }
