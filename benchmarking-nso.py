@@ -2,13 +2,13 @@
 # -*- mode: python; python-indent: 4 -*-
 
 import asyncio
-from collections import deque
 from datetime import datetime, timedelta
 import importlib.util
 import logging
 import os
 import pprint as pp
 import re
+import sqlite3
 import sys
 import time
 import traceback
@@ -478,7 +478,58 @@ async def command_handler(args, result_queue, cq):
 #  METRICS HANDLER
 #############################################################################
 
-metrics_history = deque()
+class MetricsStore:
+    def __init__(self, path):
+        self.connection = sqlite3.connect(path, timeout=5)
+        self.connection.execute('PRAGMA journal_mode=WAL')
+        self.connection.execute('PRAGMA synchronous=NORMAL')
+        self.connection.execute('PRAGMA busy_timeout=5000')
+        self.connection.execute('''
+            CREATE TABLE IF NOT EXISTS metrics (
+                timestamp INTEGER PRIMARY KEY,
+                ok INTEGER NOT NULL,
+                nok INTEGER NOT NULL
+            )
+        ''')
+        self.connection.commit()
+
+    def record(self, timestamp, ok, nok):
+        metric = (int(timestamp), ok, nok)
+        with self.connection:
+            self.connection.execute('''
+                INSERT INTO metrics(timestamp, ok, nok) VALUES (?, ?, ?)
+                ON CONFLICT(timestamp) DO UPDATE SET
+                    ok=excluded.ok,
+                    nok=excluded.nok
+            ''', metric)
+        return metric
+
+    def get(self, history=0, now=None):
+        if history:
+            now = int(time.time() if now is None else now)
+            cutoff = now - history + 1
+            cursor = self.connection.execute('''
+                SELECT timestamp, ok, nok FROM metrics
+                WHERE timestamp >= ?
+                ORDER BY timestamp
+            ''', (cutoff,))
+        else:
+            cursor = self.connection.execute('''
+                SELECT timestamp, ok, nok FROM metrics
+                ORDER BY timestamp
+            ''')
+        return cursor.fetchall()
+
+    def prune(self, retention, now=None):
+        now = int(time.time() if now is None else now)
+        cutoff = now - retention + 1
+        with self.connection:
+            cursor = self.connection.execute(
+                'DELETE FROM metrics WHERE timestamp < ?', (cutoff,))
+        return cursor.rowcount
+
+    def close(self):
+        self.connection.close()
 
 
 async def summarize_results(results):
@@ -491,16 +542,15 @@ async def summarize_results(results):
             nok += 1
     return ok, nok
 
-async def metrics_handler(args, rq):
-    global global_parameters, metrics_history
+async def metrics_handler(args, rq, metrics_store):
+    global global_parameters
 
     # Current strategy is all items from the queue once per second and assume
     # the this task is able to do that. If not, we need to change the strategy.
 
-    t_prev = time.time()
+    next_prune = time.monotonic() + 60
     while global_parameters['close_flag'] == 0:
         # Update every second
-        nt = time.time()
         await asyncio.sleep(1)
         try:
             ok = nok = 0
@@ -509,18 +559,16 @@ async def metrics_handler(args, rq):
                 results.append(rq.get_nowait())
         except asyncio.QueueEmpty:
             ok, nok = await summarize_results(results)
-        t_now = time.time()
-        #print(f"OK: {ok} NOK: {nok} {t_now-t_prev:.2f} sec {len(metrics_history)}")
-        metric = (t_now, ok, nok)
-        metrics_history.append(metric)
+        timestamp, ok, nok = metrics_store.record(time.time(), ok, nok)
+        #print(f"OK: {ok} NOK: {nok}")
         await notifications.emit(ui_pb2.Metric(
-            timestamp=int(t_now),
+            timestamp=timestamp,
             ok=ok,
             nok=nok
         ))
-        if len(metrics_history) > args.history:
-            metrics_history.popleft()
-        t_prev = t_now
+        if time.monotonic() >= next_prune:
+            metrics_store.prune(args.history)
+            next_prune = time.monotonic() + 60
 
 
 #############################################################################
@@ -546,16 +594,14 @@ class ProdCons:
 
 class UIServicer(ui_pb2_grpc.UIServicer):
 
-    def __init__(self, args) -> None:
+    def __init__(self, args, metrics_store) -> None:
         self.args = args
+        self.metrics_store = metrics_store
 
     async def Get(self, request: ui_pb2.GetRequest,
                    unused_context) -> ui_pb2.GetResponse:
-        global metrics_history
         response = ui_pb2.GetResponse(retention=self.args.history)
-        history = list(metrics_history)
-        if request.history:
-            history = history[-request.history:]
+        history = self.metrics_store.get(request.history)
         for timestamp, ok, nok in history:
             metric = ui_pb2.Metric(
                 timestamp=int(timestamp),
@@ -585,21 +631,33 @@ notifications = ProdCons()
 
 async def amain(args, rq, cq):
     global request_task
+    metrics_store = MetricsStore(args.metrics_db)
+    metrics_store.prune(args.history)
+    metrics_task = None
+    ui_api = None
+    server = grpc.aio.server()
     try:
         request_task = asyncio.create_task(command_handler(args, rq, cq))
-        metrics_task = asyncio.create_task(metrics_handler(args, rq))
+        metrics_task = asyncio.create_task(metrics_handler(args, rq, metrics_store))
 
-        server = grpc.aio.server()
-        ui_pb2_grpc.add_UIServicer_to_server(UIServicer(args), server)
+        ui_pb2_grpc.add_UIServicer_to_server(UIServicer(args, metrics_store), server)
         server.add_insecure_port('[::]:50052')
         await server.start()
         ui_api = asyncio.create_task(server.wait_for_termination())
         await asyncio.wait([request_task, metrics_task, ui_api], return_when=asyncio.FIRST_COMPLETED)
-        request_task = None
-        await server.stop(None)
-        await server.wait_for_termination()
     except asyncio.CancelledError:
         pass
+    finally:
+        tasks = [task for task in (request_task, metrics_task) if task is not None]
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+        request_task = None
+        await server.stop(None)
+        if ui_api is not None:
+            await asyncio.gather(ui_api, return_exceptions=True)
+        metrics_store.close()
 
 async def stop_request_task():
     request_task.cancel()
