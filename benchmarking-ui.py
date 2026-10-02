@@ -13,7 +13,6 @@ from flask_socketio import SocketIO, emit, disconnect
 import ui_pb2
 import ui_pb2_grpc
 import grpc
-from grpc._channel import _InactiveRpcError
 
 app = Flask(__name__)
 socketio = SocketIO(app, async_mode=None)
@@ -45,17 +44,15 @@ def notifications_task():
                 running = False
 
 
-def get_metrics(history=300):
+def get_metrics(history=300, end_timestamp=0):
     metrics = []
-    try:
-        with grpc.insecure_channel('localhost:50052') as channel:
-            stub = ui_pb2_grpc.UIStub(channel)
-            response = stub.Get(ui_pb2.GetRequest(history=history))
-            for m in response.metrics:
-                metrics.append((m.timestamp, m.ok, m.nok))
-        return metrics, response.retention
-    except _InactiveRpcError:
-        return [], 0
+    with grpc.insecure_channel('localhost:50052') as channel:
+        stub = ui_pb2_grpc.UIStub(channel)
+        response = stub.Get(ui_pb2.GetRequest(
+            history=history, end_timestamp=end_timestamp), timeout=5)
+        for m in response.metrics:
+            metrics.append((m.timestamp, m.ok, m.nok))
+    return metrics, response.retention
     
 
 @app.route("/")
@@ -65,11 +62,30 @@ def r_index():
 
 @socketio.on('start')
 def handle_message(data):
-    print(f'start: received message: {data}')
-    print('Time difference client-server (ms):', data['timestamp']-time.time()*1000)
-    metrics, retention = get_metrics(0)
-    data = [{ 'ts': m[0]*1000, 'ok': m[1], 'nok': m[2]} for m in metrics]
-    emit('startdata', {'metrics': data, 'retention': retention})
+    request_id = data.get('request_id') if isinstance(data, dict) else None
+    try:
+        if not isinstance(data, dict):
+            raise ValueError('Expected a history request object.')
+        duration = data.get('duration', data.get('windowsize', 300))
+        end = data.get('end_timestamp', 0)
+        for name, value, minimum, maximum in (
+                ('duration', duration, 1, 4294967295 - 60),
+                ('end_timestamp', end, 0, 4294967295)):
+            if type(value) is not int or not minimum <= value <= maximum:
+                raise ValueError(f'Invalid {name}.')
+        end = min(end or int(time.time()), int(time.time()))
+        # Extra samples seed the largest rolling average before the visible range.
+        history = duration + 60
+        metrics, retention = get_metrics(history, end)
+    except (ValueError, grpc.RpcError) as error:
+        app.logger.warning('Cannot load metrics: %s', error)
+        emit('history_error', {'request_id': request_id,
+                               'message': 'Unable to load metrics history.'})
+        return
+    metrics = [{'ts': m[0]*1000, 'ok': m[1], 'nok': m[2]} for m in metrics]
+    emit('startdata', {'metrics': metrics, 'retention': retention,
+                       'request_id': request_id,
+                       'end': end * 1000})
 
 
 if __name__ == "__main__":

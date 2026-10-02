@@ -504,7 +504,15 @@ class MetricsStore:
             ''', metric)
         return metric
 
-    def get(self, history=0, now=None):
+    def get(self, history=0, now=None, end_timestamp=None):
+        if end_timestamp is not None:
+            cutoff = end_timestamp - history + 1 if history else 0
+            cursor = self.connection.execute('''
+                SELECT timestamp, ok, nok FROM metrics
+                WHERE timestamp >= ? AND timestamp <= ?
+                ORDER BY timestamp
+            ''', (cutoff, end_timestamp))
+            return cursor.fetchall()
         if history:
             now = int(time.time() if now is None else now)
             cutoff = now - history + 1
@@ -601,7 +609,12 @@ class UIServicer(ui_pb2_grpc.UIServicer):
     async def Get(self, request: ui_pb2.GetRequest,
                    unused_context) -> ui_pb2.GetResponse:
         response = ui_pb2.GetResponse(retention=self.args.history)
-        history = self.metrics_store.get(request.history)
+        now = int(time.time())
+        end = min(request.end_timestamp or now, now)
+        duration = min(request.history or self.args.history,
+                       self.args.history, end - (now - self.args.history))
+        history = (self.metrics_store.get(duration, end_timestamp=end)
+                   if duration > 0 else [])
         for timestamp, ok, nok in history:
             metric = ui_pb2.Metric(
                 timestamp=int(timestamp),

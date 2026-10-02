@@ -7,7 +7,8 @@ message Empty {
 }
 
 message GetRequest {
-    uint32 history = 1; // How many history scronds to return
+    uint32 history = 1; // How many history seconds to return (0 = all retained).
+    uint32 end_timestamp = 2; // Inclusive end in Unix seconds (0 = now).
   }
 
 message Metric {

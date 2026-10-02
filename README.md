@@ -24,6 +24,26 @@ Save output as json and generate HTML reports for easy analysis of data.
 ![Screenshot](doc/transactional-troughput.png)
 ![Screenshot](doc/request-duration.png)
 
+### Live benchmarking UI
+
+`benchmarking-nso.py --history 86400` retains one day of per-second metrics in
+SQLite. Retention is independent of the chart's selected window: the UI loads
+only that window plus 60 seconds of rolling-average context. Panning or zooming
+loads the newly visible history on demand; Pause freezes the view, and Resume
+returns to live data. Loading and connection errors appear below the controls.
+A live view panned into the past buffers 30 seconds ahead and fetches small
+extensions as it scrolls, rather than loading everything between that view and
+the present.
+
+Large windows use a pixel-sized min/max envelope for rendering, preserving
+spikes without drawing every sample. Rolling averages are calculated from the
+original samples before reducing the plotted points. Live data refreshes once
+per second, with scrolling limited to 10 frames per second.
+
+After changing `ui.proto`, regenerate the Python bindings with
+`python -m grpc_tools.protoc -I. --python_out=. --grpc_python_out=. ui.proto`.
+Restart both benchmarking processes after updating the UI protocol.
+
 ## Strategy
 
 The framework is intended to be simplistic, easy to setup and parameterized to

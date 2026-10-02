@@ -132,6 +132,7 @@
         <div id="selected-window-size"></div>
         <div id="selected-rolling-average"></div>
         <div id="visible-range"></div>
+        <div id="history-status" role="status"></div>
       </div>
     </div>
     <div class="chartBox">
@@ -146,6 +147,55 @@
         var view_mode = 'live';
         var zoom_input_type = null;
         var metrics_by_timestamp = new Map();
+        var history_request_id = 0;
+        var history_timer = null;
+        var chart_dirty = false;
+        var average_context = 60000;
+        var history_loading = false;
+        var history_failed = false;
+        var history_append = false;
+        var history_loaded_end = 0;
+        var history_prefetch = 30000;
+
+        function delayed_live_view() {
+            return view_mode === 'live' && options.scales.x.realtime.delay > history_prefetch;
+        }
+
+        function visible_bounds() {
+            if (view_mode === 'paused') {
+                return {start: myChart.scales.x.min, end: myChart.scales.x.max};
+            }
+            var end = Date.now() - options.scales.x.realtime.delay;
+            return {start: end - options.scales.x.realtime.duration, end: end};
+        }
+
+        function request_history(debounce = false, append = false) {
+            clearTimeout(history_timer);
+            // Invalidate older responses immediately, even during a gesture debounce.
+            var request_id = ++history_request_id;
+            history_loading = true;
+            history_failed = false;
+            history_append = append;
+            document.getElementById('history-status').textContent = 'Loading history...';
+            history_timer = setTimeout(function() {
+                var bounds = visible_bounds();
+                var duration = Math.ceil((bounds.end - bounds.start) / 1000);
+                var end_timestamp = Math.ceil(bounds.end / 1000);
+                if (delayed_live_view()) {
+                    // Buffer a little ahead so a live-panned view can keep scrolling.
+                    duration = append ? history_prefetch / 1000 : duration + history_prefetch / 1000;
+                    end_timestamp = Math.ceil((bounds.end + history_prefetch) / 1000);
+                } else if (view_mode === 'live') {
+                    duration += Math.ceil(options.scales.x.realtime.delay / 1000);
+                    end_timestamp = 0;
+                }
+                socket.emit('start', {
+                    request_id: request_id,
+                    duration: Math.max(1, duration),
+                    end_timestamp: end_timestamp,
+                });
+            }, debounce ? 150 : 0);
+        }
 
         function format_duration(size) {
             if (size >= 3600) {
@@ -187,6 +237,7 @@
             set_view_mode('paused');
             myChart.update('none');
             update_visible_range();
+            request_history();
         }
 
         function resume_live() {
@@ -196,6 +247,7 @@
             set_view_mode('live');
             myChart.update('none');
             update_visible_range();
+            request_history();
         }
 
         function toggle_pause() {
@@ -212,6 +264,7 @@
             options.scales.x.realtime.delay = normal_delay;
             myChart.update('none');
             update_visible_range();
+            request_history();
         }
 
         function clamp_view_to_history() {
@@ -225,6 +278,7 @@
             clamp_view_to_history();
             chart.update('none');
             update_visible_range();
+            request_history(true);
         }
 
         function handle_zoom_start({event}) {
@@ -245,6 +299,7 @@
             clamp_view_to_history();
             chart.update('none');
             update_visible_range();
+            request_history(true);
         }
 
         function set_history_retention(retention) {
@@ -256,11 +311,9 @@
             options.scales.x.realtime.ttl = history_retention * 1000;
             options.plugins.zoom.limits.x.maxDelay = history_retention * 1000;
             options.plugins.zoom.limits.x.maxDuration = history_retention * 1000;
-            options.scales.x.realtime.duration = view_mode === 'live'
-                ? configured_duration()
-                : Math.min(options.scales.x.realtime.duration, history_retention * 1000);
+            options.scales.x.realtime.duration = Math.min(
+                options.scales.x.realtime.duration, history_retention * 1000);
             clamp_view_to_history();
-            trim_history();
         }
 
         function set_windowsize(size) {
@@ -268,10 +321,6 @@
             update_selected_values();
             console.log("Setting windowsize to", windowsize)
             resume_live();
-            socket.emit('start', {
-                windowsize: windowsize,
-                timestamp: Date.now(),
-            })
         }
 
         function set_rolling_average(size) {
@@ -279,7 +328,7 @@
             rolling_average_size = size;
             update_selected_values();
             rebuild_datasets();
-            myChart.update();
+            myChart.update('none');
         }
 
         const data = {
@@ -290,7 +339,6 @@
                 borderColor: '#7e95cd',
                 backgroundColor: '#7bb6dd',
                 fill: false,
-                cubicInterpolationMode: 'monotone',
             },
             {
                 lineTension: 0.0,
@@ -298,7 +346,6 @@
                 borderColor: '#ee353d',
                 backgroundColor: '#ecb6dd',
                 fill: false,
-                cubicInterpolationMode: 'monotone',
             },
             {
                 lineTension: 0.0,
@@ -306,7 +353,6 @@
                 borderColor: '#3e951d',
                 backgroundColor: '#3cb62d',
                 fill: false,
-                cubicInterpolationMode: 'monotone',
             }
 
             ],
@@ -314,13 +360,19 @@
 
         // options block
         var options = {
+            parsing: false,
             animation: {
                 duration: 0,
+            },
+            elements: {
+                point: {radius: 0},
+                line: {tension: 0},
             },
             layout: {
                 padding: 0,
             },
             plugins: {
+                streaming: {frameRate: 10},
                 title: {
                 display: false,
                 align: 'center',
@@ -370,6 +422,17 @@
                         ttl: history_retention * 1000,
                         delay: normal_delay,
                         refresh: 1000,
+                        onRefresh: function() {
+                            if (delayed_live_view() && !history_loading && !history_failed &&
+                                visible_bounds().end + normal_delay >= history_loaded_end) {
+                                request_history(false, true);
+                            }
+                            if (chart_dirty) {
+                                trim_history();
+                                rebuild_datasets();
+                                chart_dirty = false;
+                            }
+                        },
                         pause: false
                     },
                     text: "Concurrent requests",
@@ -409,25 +472,14 @@
 
         socket.on('connect', function() {
             console.log("Connected.");
-            socket.emit('start', { 
-                windowsize: windowsize,
-                timestamp: Date.now(), 
-            })
+            request_history();
         });
 
         socket.on('disconnect', function() {
-            console.log("Disconnected")
+            ++history_request_id;
+            clearTimeout(history_timer);
+            document.getElementById('history-status').textContent = 'Disconnected; waiting to reconnect.';
         });
-
-        var rolling_window = [];
-
-        function push_avg(metric) {
-            rolling_window.push(metric.ok);
-            if (rolling_window.length > rolling_average_size) {
-                rolling_window.shift();
-            }
-            return rolling_window.reduce((a, b) => a + b, 0) / rolling_window.length;
-        }
 
         function merge_metric(metric) {
             var normalized = {
@@ -446,67 +498,113 @@
             return true;
         }
 
-        function append_metric(metric) {
-            myChart.data.datasets[0].data.push({x: metric.ts, y: metric.ok});
-            myChart.data.datasets[1].data.push({x: metric.ts, y: metric.nok});
-            myChart.data.datasets[2].data.push({x: metric.ts, y: push_avg(metric)});
+        function decimate_points(points, bounds) {
+            var buckets = Math.max(1, Math.floor(myChart.width / 2));
+            if (points.length <= buckets * 4) {
+                return points;
+            }
+            var result = [];
+            var group = [];
+            var previous_bucket = -1;
+            function flush() {
+                if (group.length === 0) {
+                    return;
+                }
+                var min = group.reduce((a, b) => a.y <= b.y ? a : b);
+                var max = group.reduce((a, b) => a.y >= b.y ? a : b);
+                Array.from(new Set([group[0], min, max, group[group.length - 1]]))
+                    .sort((a, b) => a.x - b.x)
+                    .forEach(point => result.push(point));
+                group = [];
+            }
+            points.forEach(function(point) {
+                var bucket = Math.min(buckets - 1, Math.max(0,
+                    Math.floor((point.x - bounds.start) / Math.max(1, bounds.end - bounds.start) * buckets)));
+                if (bucket !== previous_bucket) {
+                    flush();
+                    previous_bucket = bucket;
+                }
+                group.push(point);
+            });
+            flush();
+            return result;
         }
 
         function rebuild_datasets() {
-            rolling_window = [];
-            myChart.data.datasets.forEach(function(dataset) {
-                dataset.data = [];
-            });
+            var bounds = visible_bounds();
+            var series = [[], [], []];
+            var rolling = [];
+            var sum = 0;
             Array.from(metrics_by_timestamp.values())
                 .sort((a, b) => a.ts - b.ts)
-                .forEach(append_metric);
+                .forEach(function(metric) {
+                    rolling.push(metric.ok);
+                    sum += metric.ok;
+                    if (rolling.length > rolling_average_size) {
+                        sum -= rolling.shift();
+                    }
+                    // Keep boundary samples for line continuity and the live delay.
+                    if (metric.ts >= bounds.start - 1000 && metric.ts <= bounds.end + normal_delay) {
+                        series[0].push({x: metric.ts, y: metric.ok});
+                        series[1].push({x: metric.ts, y: metric.nok});
+                        series[2].push({x: metric.ts, y: sum / rolling.length});
+                    }
+                });
+            myChart.data.datasets.forEach(function(dataset, index) {
+                dataset.data = decimate_points(series[index], bounds);
+            });
         }
 
         function trim_history() {
-            if (metrics_by_timestamp.size === 0) {
-                return;
-            }
-            var latest = -Infinity;
-            metrics_by_timestamp.forEach(function(metric) {
-                latest = Math.max(latest, metric.ts);
-            });
-            var cutoff = latest - history_retention * 1000;
+            var bounds = visible_bounds();
+            var cutoff = Math.max(bounds.start - average_context - 1000,
+                                  Date.now() - history_retention * 1000);
+            var end = view_mode === 'live'
+                ? Math.min(Date.now(), bounds.end + history_prefetch)
+                : bounds.end + 1000;
             metrics_by_timestamp.forEach(function(metric, timestamp) {
-                if (timestamp < cutoff) {
+                if (timestamp < cutoff || timestamp > end) {
                     metrics_by_timestamp.delete(timestamp);
                 }
-            });
-            myChart.data.datasets.forEach(function(dataset) {
-                dataset.data = dataset.data.filter(item => item.x >= cutoff);
             });
         }
 
         socket.on('startdata', function(payload) {
-            console.log("startdata event", payload)
+            if (payload.request_id !== history_request_id) {
+                return;
+            }
             set_history_retention(payload.retention);
+            var recent = Array.from(metrics_by_timestamp.values())
+                .filter(metric => history_append || (view_mode === 'live' && metric.ts > payload.end));
+            metrics_by_timestamp.clear();
+            recent.forEach(merge_metric);
             payload.metrics.forEach(merge_metric);
+            history_loaded_end = payload.end;
+            history_loading = false;
             trim_history();
             rebuild_datasets();
-            myChart.update();
+            chart_dirty = false;
+            myChart.update('none');
+            document.getElementById('history-status').textContent = '';
+        });
+
+        socket.on('history_error', function(payload) {
+            if (payload.request_id === history_request_id) {
+                history_loading = false;
+                history_failed = true;
+                document.getElementById('history-status').textContent = payload.message;
+            }
         });
 
         socket.on('value', function(metric) {
-            var data = myChart.data.datasets[0].data;
-            var existing = metrics_by_timestamp.has(Number(metric.ts));
-            if (!merge_metric(metric)) {
-                console.log("Ignoring duplicate value", metric)
+            var bounds = visible_bounds();
+            if (metric.ts < bounds.start - average_context - 1000 ||
+                metric.ts > bounds.end + (view_mode === 'live' ? history_prefetch : 1000)) {
                 return;
             }
-            trim_history();
-            data = myChart.data.datasets[0].data;
-            var last = data.length > 0 ? data[data.length - 1] : null;
-            var normalized = metrics_by_timestamp.get(Number(metric.ts));
-            if (!existing && (!last || last.x < normalized.ts)) {
-                append_metric(normalized);
-            } else {
-                rebuild_datasets();
+            if (merge_metric(metric)) {
+                chart_dirty = true;
             }
-            myChart.update();
         });
 
     </script>
