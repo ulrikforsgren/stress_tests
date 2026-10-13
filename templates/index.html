@@ -156,6 +156,8 @@
         var history_append = false;
         var history_loaded_end = 0;
         var history_prefetch = 30000;
+        // Samples are timestamped to whole seconds; tolerate some scheduling jitter.
+        var metric_gap_threshold = 2500;
 
         function delayed_live_view() {
             return view_mode === 'live' && options.scales.x.realtime.delay > history_prefetch;
@@ -339,6 +341,7 @@
                 borderColor: '#7e95cd',
                 backgroundColor: '#7bb6dd',
                 fill: false,
+                spanGaps: false,
             },
             {
                 lineTension: 0.0,
@@ -346,6 +349,7 @@
                 borderColor: '#ee353d',
                 backgroundColor: '#ecb6dd',
                 fill: false,
+                spanGaps: false,
             },
             {
                 lineTension: 0.0,
@@ -353,6 +357,7 @@
                 borderColor: '#3e951d',
                 backgroundColor: '#3cb62d',
                 fill: false,
+                spanGaps: false,
             }
 
             ],
@@ -504,29 +509,46 @@
                 return points;
             }
             var result = [];
-            var group = [];
-            var previous_bucket = -1;
-            function flush() {
-                if (group.length === 0) {
+            var segment = [];
+            function decimate_segment(segment_points) {
+                if (segment_points.length <= buckets * 4) {
+                    result.push(...segment_points);
                     return;
                 }
-                var min = group.reduce((a, b) => a.y <= b.y ? a : b);
-                var max = group.reduce((a, b) => a.y >= b.y ? a : b);
-                Array.from(new Set([group[0], min, max, group[group.length - 1]]))
-                    .sort((a, b) => a.x - b.x)
-                    .forEach(point => result.push(point));
-                group = [];
+                var group = [];
+                var previous_bucket = -1;
+                function flush_group() {
+                    if (group.length === 0) {
+                        return;
+                    }
+                    var min = group.reduce((a, b) => a.y <= b.y ? a : b);
+                    var max = group.reduce((a, b) => a.y >= b.y ? a : b);
+                    Array.from(new Set([group[0], min, max, group[group.length - 1]]))
+                        .sort((a, b) => a.x - b.x)
+                        .forEach(point => result.push(point));
+                    group = [];
+                }
+                segment_points.forEach(function(point) {
+                    var bucket = Math.min(buckets - 1, Math.max(0,
+                        Math.floor((point.x - bounds.start) / Math.max(1, bounds.end - bounds.start) * buckets)));
+                    if (bucket !== previous_bucket) {
+                        flush_group();
+                        previous_bucket = bucket;
+                    }
+                    group.push(point);
+                });
+                flush_group();
             }
             points.forEach(function(point) {
-                var bucket = Math.min(buckets - 1, Math.max(0,
-                    Math.floor((point.x - bounds.start) / Math.max(1, bounds.end - bounds.start) * buckets)));
-                if (bucket !== previous_bucket) {
-                    flush();
-                    previous_bucket = bucket;
+                if (point.y === null) {
+                    decimate_segment(segment);
+                    segment = [];
+                    result.push(point);
+                } else {
+                    segment.push(point);
                 }
-                group.push(point);
             });
-            flush();
+            decimate_segment(segment);
             return result;
         }
 
@@ -535,9 +557,16 @@
             var series = [[], [], []];
             var rolling = [];
             var sum = 0;
+            var previous_timestamp = null;
             Array.from(metrics_by_timestamp.values())
                 .sort((a, b) => a.ts - b.ts)
                 .forEach(function(metric) {
+                    var gap = previous_timestamp !== null &&
+                        metric.ts - previous_timestamp > metric_gap_threshold;
+                    if (gap) {
+                        rolling = [];
+                        sum = 0;
+                    }
                     rolling.push(metric.ok);
                     sum += metric.ok;
                     if (rolling.length > rolling_average_size) {
@@ -545,10 +574,15 @@
                     }
                     // Keep boundary samples for line continuity and the live delay.
                     if (metric.ts >= bounds.start - 1000 && metric.ts <= bounds.end + normal_delay) {
+                        if (gap && series[0].length > 0) {
+                            var gap_midpoint = (previous_timestamp + metric.ts) / 2;
+                            series.forEach(points => points.push({x: gap_midpoint, y: null}));
+                        }
                         series[0].push({x: metric.ts, y: metric.ok});
                         series[1].push({x: metric.ts, y: metric.nok});
                         series[2].push({x: metric.ts, y: sum / rolling.length});
                     }
+                    previous_timestamp = metric.ts;
                 });
             myChart.data.datasets.forEach(function(dataset, index) {
                 dataset.data = decimate_points(series[index], bounds);
