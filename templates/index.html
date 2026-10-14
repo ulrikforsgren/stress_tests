@@ -129,6 +129,7 @@
         </div>
         <button id="pause-button" class="dropbtn" onclick="toggle_pause()">Pause</button>
         <button class="dropbtn" onclick="reset_view()">Reset Zoom</button>
+        <button class="dropbtn" onclick="download_chart_png()">Download PNG</button>
       </div>
       <div class="selected-values">
         <div id="selected-window-size"></div>
@@ -269,6 +270,36 @@
             myChart.update('none');
             update_visible_range();
             request_history();
+        }
+
+        function download_chart_png() {
+            var source = myChart.canvas;
+            var export_canvas = document.createElement('canvas');
+            export_canvas.width = source.width;
+            export_canvas.height = source.height;
+            var context = export_canvas.getContext('2d');
+            if (!context) {
+                return;
+            }
+
+            // Match the page's white background in the downloaded PNG.
+            context.fillStyle = '#fff';
+            context.fillRect(0, 0, export_canvas.width, export_canvas.height);
+            context.drawImage(source, 0, 0);
+            export_canvas.toBlob(function(blob) {
+                if (!blob) {
+                    return;
+                }
+                var url = URL.createObjectURL(blob);
+                var link = document.createElement('a');
+                var timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+                link.href = url;
+                link.download = `benchmarking-nso-${timestamp}.png`;
+                document.body.appendChild(link);
+                link.click();
+                link.remove();
+                setTimeout(function() { URL.revokeObjectURL(url); }, 1000);
+            }, 'image/png');
         }
 
         function clamp_view_to_history() {
