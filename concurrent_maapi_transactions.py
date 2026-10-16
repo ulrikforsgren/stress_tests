@@ -112,6 +112,8 @@ def parse_args(argv=None):
 def main(argv=None):
     args = parse_args(argv)
     try:
+        starttime = time.monotonic()
+        completed = None
         # Build all work items in the parent before submitting them to workers.
         intents = [Intent(name=f"intent-{index:06d}", i=index)
                    for index in range(0, args.transactions)]
@@ -123,11 +125,12 @@ def main(argv=None):
         ) as pool:
             completed = sum(1 for _ in pool.imap_unordered(
                 execute_intent, intents, chunksize=1))
-            time.sleep(60)
     except KeyboardInterrupt:
         raise SystemExit("Interrupted; active worker processes were stopped.")
-
-    print(f"Completed {completed} transactions using {args.concurrency} workers.")
+    finally:
+        elapsedtime = time.monotonic()-starttime
+        print(f"Completed {completed} transactions using {args.concurrency}"
+              f" workers in {elapsedtime} seconds.")
     return 0
 
 

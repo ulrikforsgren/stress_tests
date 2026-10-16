@@ -2,6 +2,7 @@
 # -*- mode: python; python-indent: 4 -*-
 
 import argparse
+import ipaddress
 import sys
 import time
 
@@ -21,22 +22,24 @@ def parseArgs(cmd_args):
                         help="Starting device number")
     parser.add_argument('-p', '--port', type=int, default=10000,
                         help="Starting port number")
-    parser.add_argument('-m', type=int, default=0,
-                        help="Wrap port number using: 'c + i mod m.'")
+    parser.add_argument('-m', '--port-count', type=int, default=1000,
+                        help="Number of ports available per address")
     parser.add_argument('-a', '--address', type=str, default='localhost',
-                        help="Device address")
+                        help="First device address")
+    parser.add_argument('--address-count', type=int, default=1,
+                        help="Number of consecutive device addresses")
     parser.add_argument('-t', '--type',
                         choices=['cli', 'netconf'],
                         default='cli',
                         help="Type of device")
     parser.add_argument('--nid', type=str,
-                        default='cisco-ios-cli-3.0',
+                        default='cisco-ios-cli-6.109',
                         help="Type of device")
     parser.add_argument('--accept-out-of-sync',
                         action='store_true', default=False,
                         help="Device address")
     parser.add_argument('cmd',
-                        choices=['create', 'delete', 'find', 'fetch', 'sync-from',
+                        choices=['create', 'create-config', 'delete', 'find', 'fetch', 'sync-from',
                                  'create-group', 'list-ned-ids'],
                         help="Command")
     return parser.parse_args()
@@ -44,6 +47,10 @@ def parseArgs(cmd_args):
 
 parameters = {
     'create': {
+            'needs_transaction': True,
+            'p_devices': 100
+        },
+    'create-config': {
             'needs_transaction': True,
             'p_devices': 100
         },
@@ -63,6 +70,7 @@ parameters = {
 
 cmd_text = {
     'create': 'created',
+    'create-config': 'created',
     'delete': 'deleted',
     'find': 'capabilities found',
     'fetch': 'fetch ssh host keys'
@@ -70,7 +78,7 @@ cmd_text = {
 
 
 def create_device(r, name, address, port, t, nedid, authgrp,
-                  accept_out_of_sync=False):
+                  accept_out_of_sync=False, admin_state='unlocked'):
     device = r.devices.device
     dev = device.create(name)
     dev.address = address
@@ -80,11 +88,38 @@ def create_device(r, name, address, port, t, nedid, authgrp,
     elif t=='netconf':
         dev.device_type.netconf.ned_id = nedid
     dev.authgroup = authgrp
-    dev.state.admin_state = "unlocked"
+    dev.state.admin_state = admin_state
     if accept_out_of_sync:
         dev.out_of_sync_commit_behaviour = 'accept'
     else:
         dev.out_of_sync_commit_behaviour = 'reject'
+
+
+def create_device_config(r, name):
+    device = r.python_service.device
+    dev = device.create(name)
+    dev.config.interface.FastEthernet.create('0/1')
+
+def device_endpoint(device_number, start_address, address_count,
+                    start_port, port_count):
+    if address_count < 1:
+        raise ValueError("--address-count must be at least 1")
+    if port_count < 1:
+        raise ValueError("--port-count must be at least 1")
+
+    if address_count == 1:
+        address = start_address
+    else:
+        try:
+            address = str(ipaddress.ip_address(start_address) +
+                          device_number % address_count)
+        except ValueError as exc:
+            raise ValueError(
+                "--address must be an IP address when --address-count is greater than 1"
+            ) from exc
+
+    port = start_port + (device_number // address_count) % port_count
+    return address, port
 
 
 def find_capabilities(devices, name):
@@ -130,9 +165,14 @@ def main(args):
             dt = args.type
             nedid = args.nid
             if args.cmd == 'create':
-                create_device(r, f'{args.name}{n}', args.address,
-                              args.port+n%1000, dt, nedid, 'default',
+                address, port = device_endpoint(
+                    n, args.address, args.address_count,
+                    args.port, args.port_count)
+                create_device(r, f'{args.name}{n}', address,
+                              port, dt, nedid, 'default',
                               args.accept_out_of_sync)
+            elif args.cmd == 'create-config':
+                create_device_config(r, f'{args.name}{n}')
             elif args.cmd == 'delete':
                 del r.devices.device[f'{args.name}{n}']
             elif args.cmd == 'find':
