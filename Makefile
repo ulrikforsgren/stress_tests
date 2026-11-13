@@ -173,7 +173,11 @@ rebuild-pkgs2:
 venv: venv/bin/activate
 venv/bin/activate:
 	python3 -m venv venv
-	(. venv/bin/activate; python3 -m pip install -r requirements.txt)
+	if command -v uv >/dev/null 2>&1; then \
+	  (. venv/bin/activate; uv pip install -r requirements.txt); \
+	else \
+	  (. venv/bin/activate; python3 -m pip install -r requirements.txt); \
+	fi
 
 #
 # Single node
