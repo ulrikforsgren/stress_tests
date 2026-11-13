@@ -13,7 +13,8 @@ class ServiceCallbacks(Service):
     @Service.create
     def cb_create(self, tctx, root, service, proplist):
         self.log.info('Service create(service=', service._path, ')')
-        time.sleep(service.delay/1000)
+        if service.delay:
+            time.sleep(service.delay/1000)
         vars = ncs.template.Variables()
         for t in service.template:
             template = ncs.template.Template(service)

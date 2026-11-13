@@ -9,6 +9,9 @@ its own transaction and must populate it without calling ``apply()``.
 
 import argparse
 from importlib import import_module
+import os
+import re
+import shutil
 import sys
 import time
 from typing import NamedTuple
@@ -22,10 +25,39 @@ import device_manager
 #DEFAULT_DEVICE_STEPS = [10, 1000, 2000, 5000, 10000, 20000]
 DEFAULT_DEVICE_STEPS = [10, 20, 50]
 
+_COLOR_MODE = 'auto'
+_ANSI_ESCAPE = re.compile(r'\033\[[0-9;]*m')
+_RESET = '\033[0m'
+_BOLD = '\033[1m'
+_DIM = '\033[2m'
+_RED = '\033[31m'
+_GREEN = '\033[32m'
+_YELLOW = '\033[33m'
+_BLUE = '\033[34m'
+_CYAN = '\033[36m'
+
 
 class Intent(NamedTuple):
     name: str
     i: int
+
+
+def colorize(text, *codes):
+    """Add ANSI styling when color output is enabled."""
+    stream = getattr(sys.stdout, 'console', sys.stdout)
+    enabled = (
+        _COLOR_MODE == 'always'
+        or (_COLOR_MODE == 'auto'
+            and os.environ.get('NO_COLOR') is None
+            and getattr(stream, 'isatty', lambda: False)())
+    )
+    if not enabled:
+        return text
+    return ''.join(codes) + text + _RESET
+
+
+def strip_color(text):
+    return _ANSI_ESCAPE.sub('', text)
 
 
 def parse_device_steps(value):
@@ -69,7 +101,9 @@ def check_ned_id(args):
     ned_ids = list_ned_ids(args)
     if any(ned_id.split(':', 1)[-1] == args.nid for ned_id in ned_ids):
         return
-    print(f'NED ID {args.nid!r} was not found. Available NED IDs:', flush=True)
+    print(colorize(
+        f'NED ID {args.nid!r} was not found. Available NED IDs:',
+        _BOLD, _RED), flush=True)
     print_ned_ids(ned_ids)
     sys.exit(1)
 
@@ -123,6 +157,8 @@ def build_parser():
     parser.add_argument('--no-fetch-host-keys', dest='fetch_host_keys',
                         action='store_false', default=True,
                         help='Skip ssh fetch-host-keys after device creation.')
+    parser.add_argument('--device-batch-delay', type=float, default=0.0,
+                        help='Pause between device creation batches.')
     parser.add_argument('--device-service-delay', type=float, default=1.0,
                         help='Pause after device creation before services.')
     parser.add_argument('--step-delay', type=float, default=1.0,
@@ -135,6 +171,12 @@ def build_parser():
                         help='Pause between service transactions.')
     parser.add_argument('--user', default='admin', help='NSO user.')
     parser.add_argument('--context', default='system', help='NSO context.')
+    parser.add_argument('--output',
+                        help='Also write the console output to this file '
+                             '(default: a timestamped log file).')
+    parser.add_argument('--color', choices=['auto', 'always', 'never'],
+                        default='auto',
+                        help='Colorize console output (default: auto).')
     return parser
 
 
@@ -171,7 +213,8 @@ def parse_args(argv=None):
         parser.error('--device-start must be non-negative')
     if args.service_count < 0:
         parser.error('--service-count must be non-negative')
-    for name in ('device_service_delay', 'step_delay', 'service_delay'):
+    for name in ('device_batch_delay', 'device_service_delay',
+                 'step_delay', 'service_delay'):
         if getattr(args, name) < 0:
             parser.error(f'--{name.replace("_", "-")} must be non-negative')
     if args.admin_state == 'southbound-locked':
@@ -214,15 +257,27 @@ def run_transaction(args, populate):
     }
 
 
-def print_timing(label, timing):
-    print(
-        f'{label}: transaction-setup='
+def print_timing(label, timing, overwrite=False):
+    total = f'{timing["total_s"]:.6f}s'
+    message = (
+        f'{colorize(label + ":", _BOLD, _CYAN)} '
+        f'{colorize("transaction-setup=", _DIM)}'
         f'{timing["transaction_setup_s"]:.6f}s '
-        f'populate={timing["populate_s"]:.6f}s '
-        f'apply={timing["apply_s"]:.6f}s '
-        f'total={timing["total_s"]:.6f}s',
-        flush=True,
+        f'{colorize("populate=", _DIM)}{timing["populate_s"]:.6f}s '
+        f'{colorize("apply=", _DIM)}{timing["apply_s"]:.6f}s '
+        f'{colorize("total=", _BOLD)}'
+        f'{colorize(total, _BOLD, _GREEN)}'
     )
+    if overwrite:
+        console = getattr(sys.stdout, 'console', sys.stdout)
+        console.write('\r\033[K' + message)
+        console.flush()
+        log = getattr(sys.stdout, 'log', None)
+        if log is not None:
+            log.write(strip_color(message) + '\n')
+            log.flush()
+        return
+    print(message, flush=True)
 
 
 def prepare_devices(args, first_number, count):
@@ -244,10 +299,13 @@ def prepare_devices(args, first_number, count):
                     device_manager.fetch_host_keys(root.devices, name)
                 fetch_time = time.perf_counter() - fetch_start
 
+    total = f'{find_time + fetch_time:.6f}s'
     print(
-        f'Prepared {count} devices: find-capabilities={find_time:.6f}s '
+        f'{colorize("Prepared:", _BOLD, _BLUE)}           '
+        f'find-capabilities={find_time:.6f}s '
         f'ssh/fetch_host_keys={fetch_time:.6f}s '
-        f'total={find_time + fetch_time:.6f}s',
+        f'{colorize("total=", _BOLD)}'
+        f'{colorize(total, _BOLD, _GREEN)}',
         flush=True,
     )
 
@@ -277,8 +335,12 @@ def create_devices(args, first_number, count):
         print_timing(
             f'Device batch {batch_number}/{total_batches} '
             f'({batch_count} devices, {device_range})',
-            metrics)
+            metrics, overwrite=True)
+        if batch_number == total_batches:
+            print(flush=True)
         created += batch_count
+        if args.device_batch_delay and batch_number < total_batches:
+            time.sleep(args.device_batch_delay)
     return created
 
 
@@ -288,14 +350,22 @@ def create_services(args, callback, target_devices, first_intent):
         intent = Intent(name=f'service-{intent_number:06d}', i=intent_number)
 
         def populate(root, transaction):
-            callback('scale-benchmark', transaction, root, intent)
+            stdout = sys.stdout
+            if hasattr(stdout, 'log'):
+                sys.stdout = stdout.log
+            try:
+                callback('scale-benchmark', transaction, root, intent)
+            finally:
+                sys.stdout = stdout
 
         timing = run_transaction(args, populate)
         print_timing(
-            f'Service {offset + 1}/{args.service_count} at '
-            f'{target_devices} devices ({intent.name})', timing)
+            f'Create Service:     {offset + 1}/{args.service_count} '
+            f'({intent.name})', timing,
+            overwrite=True)
         if args.service_delay and offset + 1 < args.service_count:
             time.sleep(args.service_delay)
+    print(flush=True)
     return args.service_count
 
 
@@ -310,14 +380,65 @@ def delete_services(args, target_devices, first_intent):
 
         timing = run_transaction(args, populate)
         print_timing(
-            f'Delete service {offset + 1}/{args.service_count} at '
-            f'{target_devices} devices ({service_name})', timing)
+            f'Delete service:     {offset + 1}/{args.service_count} '
+            f'({service_name})', timing,
+            overwrite=True)
         if args.service_delay and offset + 1 < args.service_count:
             time.sleep(args.service_delay)
+    print(flush=True)
+
+
+class _Tee:
+    """Write each chunk to the console and the log file."""
+
+    def __init__(self, console, log):
+        self.console = console
+        self.log = log
+        self.streams = (console, log)
+
+    def write(self, data):
+        self.console.write(data)
+        self.log.write(strip_color(data))
+        self.flush()
+        return len(data)
+
+    def writelines(self, lines):
+        for line in lines:
+            self.write(line)
+
+    def flush(self):
+        for stream in self.streams:
+            stream.flush()
+
+    def isatty(self):
+        return self.streams[0].isatty()
+
+
+def open_output_log(args):
+    path = args.output or time.strftime(
+        'scale_transaction_benchmark-%Y%m%d-%H%M%S.log')
+    log_file = open(path, 'w', encoding='utf-8', buffering=1)
+    sys.stdout = _Tee(sys.__stdout__, log_file)
+    sys.stderr = _Tee(sys.__stderr__, log_file)
+    print(f'Writing output to {path}', flush=True)
+    return log_file
 
 
 def main(argv=None):
+    global _COLOR_MODE
+
     args = parse_args(argv)
+    _COLOR_MODE = args.color
+    stdout, stderr = sys.stdout, sys.stderr
+    log_file = open_output_log(args)
+    try:
+        return run(args)
+    finally:
+        sys.stdout, sys.stderr = stdout, stderr
+        log_file.close()
+
+
+def run(args):
     if args.save_config:
         save_config(args)
         sys.exit(0)
@@ -328,8 +449,9 @@ def main(argv=None):
     check_ned_id(args)
     callback = load_callback(args.function) if args.function else None
     if callback is None:
-        print('No -f callback supplied; service transactions will be skipped.',
-              flush=True)
+        print(colorize(
+            'No -f callback supplied; service transactions will be skipped.',
+            _YELLOW), flush=True)
 
     existing_total = 0
     intent_index = 0
@@ -339,8 +461,9 @@ def main(argv=None):
             continue
         add_count = target_devices - existing_total
         
-        print(f'\nScaling to {target_devices} devices '
-              f'(adding {add_count})', flush=True)
+        print(colorize(
+            f'\nScaling to {target_devices} devices (adding {add_count})',
+            _BOLD, _BLUE), flush=True)
         created = create_devices(
             args, args.device_start + existing_total, add_count)
 
@@ -362,15 +485,13 @@ def main(argv=None):
             service_delete_phase_time = time.perf_counter() - service_delete_start
             intent_index += created_services
 
-        print(
+        print(colorize(
             f'Scale {target_devices} complete: '
             f'device_phase={created:.6f}s '
             f'service_create_phase={service_create_phase_time:.6f}s '
             f'service_delete_phase={service_delete_phase_time:.6f}s '
             f'elapsed={time.perf_counter() - scale_start:.6f}s',
-        
-            flush=True,
-        )
+            _BOLD, _GREEN), flush=True)
         if args.step_delay and step_index + 1 < len(args.device_steps):
             time.sleep(args.step_delay)
 

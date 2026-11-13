@@ -60,5 +60,53 @@ module python-service {
         type string;
       }
     }
+
+    list device {
+      key name;
+
+      leaf name {
+        type string;
+      }
+
+      container config {
+        container vlan {
+          list vlan-list {
+            key id;
+
+            leaf id {
+              type uint16;
+            }
+
+            leaf name {
+              type string;
+            }
+          }
+        }
+        container interface {
+          list Ethernet {
+            key name;
+            
+            leaf name {
+              type string;
+            }
+            
+            leaf description {
+              type string;
+            }
+          }
+          list FastEthernet {
+            key name;
+            
+            leaf name {
+              type string;
+            }
+            
+            leaf description {
+              type string;
+            }
+          }
+        }
+      }
+    }
   }
 }

@@ -1,0 +1,17 @@
+<config-template xmlns="http://tail-f.com/ns/config/1.0">
+  <python-service xmlns="http://example.com/python-service">
+    <device>
+      <name>{/device}</name>
+      <config>
+        <?for i={/start-vlan}; {$i < /start-vlan+/num-vlan}; i={$i + 1} ?>
+        <vlan>
+          <vlan-list>
+            <id>{$i}</id>
+            <name>{$i}-{/str-value}</name>
+          </vlan-list>
+        </vlan>
+        <?end?>
+      </config>
+    </device>
+  </python-service>
+</config-template>

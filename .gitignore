@@ -20,4 +20,12 @@ pkg-repo/**/build-meta-data.xml
 pkg-repo/BUILT
 SINGLE-BUILD
 README.ncs
-
+pe/
+pkg-repo/
+!pkg-repo/
+pkg-repo/*
+!pkg-repo/python-service/
+pkg-repo/python-service/*
+!pkg-repo/python-service/templates/
+pkg-repo/python-service/templates/*
+!pkg-repo/python-service/templates/vlans-config.xml

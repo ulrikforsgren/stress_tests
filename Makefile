@@ -361,3 +361,8 @@ test:
 	elif [ -e LSA-BUILD ]; then \
 	fi
 
+clean-cdb:
+	ncs --stop || true
+	rm -rf ncs-cdb
+	cp -rp ncs-cdb.bak ncs-cdb
+	rm -rf logs/*
