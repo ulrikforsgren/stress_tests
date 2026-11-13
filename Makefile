@@ -19,6 +19,15 @@ NSO_VERSION = $(shell ncs --version)
 NSO_VER_MAJ = $(shell echo $(NSO_VERSION) | cut -f1 -d.)
 NSO_VER_MIN = $(shell echo $(NSO_VERSION) | cut -f2 -d. | cut -f1 -d_)
 NSO_MAJOR_VERSION = $(NSO_VER_MAJ).$(NSO_VER_MIN)
+NSO_VERSION_GE_6_4 = $(shell if [ $(NSO_VER_MAJ) -gt 6 ] || { [ $(NSO_VER_MAJ) -eq 6 ] && [ $(NSO_VER_MIN) -ge 4 ]; }; then echo yes; fi)
+
+ifeq "$(NSO_VERSION_GE_6_4)" "yes"
+DEVICE_NED = cisco-ios-netsim-cli-1.0
+DEVICE_NED_PACKAGE = $(NCS_DIR)/examples.ncs/common/packages/$(DEVICE_NED)
+else
+DEVICE_NED = cisco-ios-cli-3.0
+DEVICE_NED_PACKAGE = $(DEVICE_NED)
+endif
 
 # Handle version dependent differencies
 ifeq "$(NSO_MAJOR_VERSION)" "5.2"
@@ -184,7 +193,7 @@ venv/bin/activate:
 #
 
 ncs.conf:
-	ncs-setup --dest . --package cisco-ios-cli-3.0
+	ncs-setup --dest . --package $(DEVICE_NED_PACKAGE)
 
 follower/ncs.conf:
 	mkdir follower; \

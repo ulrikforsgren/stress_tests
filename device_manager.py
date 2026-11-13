@@ -9,6 +9,12 @@ import time
 import ncs
 
 
+def default_ned_id(version):
+    major, minor = (int(part) for part in version.split('.', 2)[:2])
+    if major > 6 or (major == 6 and minor >= 4):
+        return 'cisco-ios-netsim-cli-1.0'
+    return 'cisco-ios-cli-3.0'
+
 
 def parseArgs(cmd_args):
     parser = argparse.ArgumentParser(cmd_args)
@@ -33,7 +39,7 @@ def parseArgs(cmd_args):
                         default='cli',
                         help="Type of device")
     parser.add_argument('--nid', type=str,
-                        default='cisco-ios-cli-6.109',
+                        default=None,
                         help="Type of device")
     parser.add_argument('--accept-out-of-sync',
                         action='store_true', default=False,
@@ -146,6 +152,11 @@ def main(args):
         for e in r.devices.ned_ids.ned_id:
             print(e.id)
         return
+
+    if args.nid is None:
+        t = ncs.maapi.Transaction(m, db=ncs.OPERATIONAL, rw=ncs.READ)
+        r = ncs.maagic.get_root(t)
+        args.nid = default_ned_id(str(r.ncs_state.version))
 
     n = args.i
     n_devices = args.count
