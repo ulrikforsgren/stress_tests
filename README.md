@@ -26,6 +26,19 @@ Save output as json and generate HTML reports for easy analysis of data.
 
 ### Live benchmarking UI
 
+Run one job without starting the interactive UI with `./run-benchmarking-job.py
+JOB`. Override job parameters with repeatable `-p KEY=VALUE` options; values are
+parsed as JSON when possible, so strings, numbers, booleans, arrays, and objects
+can be passed. For example:
+
+```sh
+./run-benchmarking-job.py model-a -p requests-count=1000 -p concurrency=8
+```
+
+Use `--host HOST[:PORT]` to select the NSO endpoint. The runner exits when the
+selected job exits; jobs configured to run continuously can be interrupted with
+Ctrl-C.
+
 `benchmarking-nso.py --history 86400` retains one day of per-second metrics in
 SQLite. Retention is independent of the chart's selected window: the UI loads
 only that window plus 60 seconds of rolling-average context. Panning or zooming

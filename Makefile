@@ -70,7 +70,7 @@ check-ha: check-build
 
 
 .PHONY: single
-single: SINGLE-BUILD packages ncs.conf venv initial-data
+single: SINGLE-BUILD packages ncs.conf initial-data | venv
 
 .PHONY: SINGLE-BUILD
 SINGLE-BUILD:
@@ -82,7 +82,7 @@ SINGLE-BUILD:
 
 
 .PHONY: lsa
-lsa: LSA-BUILD upper-nso lower-nso-1 lower-nso-2 venv
+lsa: LSA-BUILD upper-nso lower-nso-1 lower-nso-2 | venv
 
 .PHONY: LSA-BUILD
 LSA-BUILD:
@@ -178,9 +178,7 @@ rebuild-pkgs2:
 	  $(MAKE) -C $${i}/src clean all || exit 1; \
 	done
 
-.PHONY: venv
-venv: venv/bin/activate
-venv/bin/activate:
+venv:
 	python3 -m venv venv
 	if command -v uv >/dev/null 2>&1; then \
 	  (. venv/bin/activate; uv pip install -r requirements.txt); \
