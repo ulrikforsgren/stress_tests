@@ -44,6 +44,11 @@ def parseArgs(cmd_args):
     parser.add_argument('--accept-out-of-sync',
                         action='store_true', default=False,
                         help="Device address")
+    parser.add_argument('--admin-state', type=str,
+                        default='southbound-locked',
+                        help="Administrative state for created devices")
+    parser.add_argument('--find', action='store_true',
+                        help="Find capabilities for newly created devices")
     parser.add_argument('cmd',
                         choices=['create', 'create-config', 'delete', 'find', 'fetch', 'sync-from',
                                  'create-group', 'list-ned-ids'],
@@ -84,7 +89,7 @@ cmd_text = {
 
 
 def create_device(r, name, address, port, t, nedid, authgrp,
-                  accept_out_of_sync=False, admin_state='unlocked'):
+                  accept_out_of_sync=False, admin_state='southbound-locked'):
     device = r.devices.device
     dev = device.create(name)
     dev.address = address
@@ -181,7 +186,7 @@ def main(args):
                     args.port, args.port_count)
                 create_device(r, f'{args.name}{n}', address,
                               port, dt, nedid, 'default',
-                              args.accept_out_of_sync)
+                              args.accept_out_of_sync, args.admin_state)
             elif args.cmd == 'create-config':
                 create_device_config(r, f'{args.name}{n}')
             elif args.cmd == 'delete':
@@ -199,6 +204,11 @@ def main(args):
             if n>=n_devices: break
         if parameters[args.cmd]['needs_transaction']:
             t.apply()
+        if args.cmd == 'create' and args.find:
+            r = ncs.maagic.get_root(m)
+            for device_number in range(x, n):
+                find_capabilities(r.devices, f'{args.name}{device_number}')
+        if parameters[args.cmd]['needs_transaction']:
             t = ncs.maapi.Transaction(m, db=ncs.RUNNING,rw=ncs.READ_WRITE)
         elap = time.monotonic()-start
         dnames = f"{args.name}{x}-{args.name}{n-1}" if n-x>1 else f"{args.name}{x}"
